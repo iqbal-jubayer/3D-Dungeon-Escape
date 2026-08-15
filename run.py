@@ -17,14 +17,15 @@ camera_pos = (0,-500,400)
 fovY = 120  # Field of view
 
 WINDOW_SIZE = (1000,800)
-WINDOW_TITLE = b"Game"
+WINDOW_TITLE = b"3D Dungeon Escape"
 FPS = 60
+FIRST_PERSON = False
 
 # GAME_STATE
 #   - MENU
 #   - HELP
 #   - GAME
-GAME_STATE = "GAME"
+GAME_STATE = "MENU"
 
 # classes
 class CAMERA:
@@ -40,161 +41,284 @@ class CAMERA:
         self.distance = 80
 
     def update(self):
-        self.camera_x = 0
-        self.camera_y = 1
-        self.camera_z = 500
-        
-        self.target_x = 0
-        self.target_y = 0
-        self.target_z = 0
-        return
+        if not FIRST_PERSON:
+            self.camera_x = player.x
+            self.camera_y = player.y + 100
+            self.camera_z = 1000
+            
+            self.target_x = player.x
+            self.target_y = player.y
+            self.target_z = 0
+            return
         theta = math.radians(player.angle)
         fx = math.sin(theta)
         fy = -math.cos(theta)
         
         self.camera_x = player.x - fx * self.distance
         self.camera_y = player.y - fy * self.distance
-        self.camera_z = 120
+        self.camera_z = 100
         
         self.target_x = player.x
         self.target_y = player.y
         self.target_z = 90
 
-class STARTROOM:
-    x = 0
-    y = 0
-    width = 1000
-    length = 500
-    tile_size = 50
-    
-    angle = 0
-    wall = []
-    
-    def __init__(self):
-        self.countX = (self.width // self.tile_size)//2
-        self.countY = (self.length // self.tile_size)//2
+class BULB:
+    def __init__(self, x, y, z=0, solid=True):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.radius = 20
+        self.color = (1, 1, 0)
+        self.solid = solid
         
-        self.wall.append(
-            WALL_V(self.width//2 + self.tile_size, self.length//2 - self.tile_size//2, self.tile_size, self.length)
-        )
-        self.wall.append(
-            WALL_V(-self.width//2, self.length//2 - self.tile_size//2, self.tile_size, self.length)
-        )
-        
-        self.wall.append(
-            WALL_H(self.width//2, self.length//2 - self.tile_size//2, self.tile_size, self.width - self.tile_size)
-        )
-        
-        self.wall.append(
-            WALL_H(self.width//2, -self.length//2 - self.tile_size//2, self.tile_size, self.width//2 - self.tile_size*2)
-        )
-        
-        self.wall.append(
-            WALL_H(-self.tile_size, -self.length//2 - self.tile_size//2, self.tile_size, self.width//2 - self.tile_size*2)
-        )
-    
     def draw(self):
-        glTranslatef(self.x, self.y, 0)
-        glRotatef(self.angle, 0, 0, 1)
-        
+        r, g, b = self.color
         glPushMatrix()
-        
-        glPushMatrix()
-        for i in range(-self.countX, self.countX+1, 1):
-            for j in range(-self.countY, self.countY+1, 1):
-                draw_rect(i*self.tile_size, j*self.tile_size, self.tile_size, self.tile_size, color=(206/255, 109/255, 58/255))
+        glTranslatef(self.x, self.y, self.z)
+        glColor3f(r, g, b)
+        gluSphere(gluNewQuadric(), self.radius, 10, 10)
         glPopMatrix()
         
-        for wall in self.wall:
-            wall.draw()
+    def collision_detection(self, x, y, radius):
+        min_x = self.x - self.radius//2
+        max_x = self.x + self.radius//2
         
-        glPopMatrix()
+        min_y = self.y - self.radius//2
+        max_y = self.y + self.radius//2
+        
+        return (x + radius > min_x and
+        x - radius < max_x and
+        y + radius > min_y and
+        y - radius < max_y)
+        
+class WALL_VERTICAL:
+    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1), solid=True):
+        self.x = x
+        self.y = y
+        self.z = height//2 * depth + depth//2
+        self.width = width
+        self.height = height
+        self.depth = depth
+        self.col_x = col_x
+        self.col_y = col_y
+        self.color = color
+        self.solid = solid
+        
+    def draw(self):
+        glPushMatrix()
+        r, g, b = self.color
+        distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
+        if distance < 75:
+            r += 0.35
+            g += 0.25
+            b += 0.10
 
-    def collision(self):
-        for wall in self.wall:
-            collided = wall.collision()
-            if collided:
+        elif distance < 150:
+            r += 0.20
+            g += 0.13
+            b += 0.05
+
+        elif distance < 250:
+            r += 0.08
+            g += 0.05
+            b += 0.02
+        glColor3f(r, g, b)
+        glTranslatef(self.x, self.y, self.z)
+        glScalef(self.depth, self.width * self.depth, self.height * self.depth)
+        glutSolidCube(1)
+        glPopMatrix()
+    
+    def collision_detection(self, x, y, radius):
+        min_y = (self.y + self.col_y) - (self.width * self.depth)/2
+        max_y = (self.y + self.col_y) + (self.width * self.depth)/2
+        
+        min_x = (self.x + self.col_x) - self.depth//2
+        max_x = (self.x + self.col_x) + self.depth//2
+        
+        return (x + radius > min_x and
+                x - radius < max_x and
+                y + radius > min_y and
+                y - radius < max_y)
+        
+class WALL_HORIZONTAL:
+    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1, 1, 1), solid=True):
+        self.x = x
+        self.y = y
+        self.z = height//2 * depth + depth//2
+        self.width = width
+        self.height = height
+        self.depth = depth
+        self.col_x = col_x
+        self.col_y = col_y
+        self.color = color
+        self.solid = solid
+        
+    def draw(self):
+        glPushMatrix()
+        r, g, b = self.color
+        distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
+        if distance < 75:
+            r += 0.35
+            g += 0.25
+            b += 0.10
+
+        elif distance < 150:
+            r += 0.20
+            g += 0.13
+            b += 0.05
+
+        elif distance < 250:
+            r += 0.08
+            g += 0.05
+            b += 0.02
+        glColor3f(r, g, b)
+        glTranslatef(self.x, self.y, self.z)
+        glScalef(self.width * self.depth, self.depth, self.height * self.depth)
+        glutSolidCube(1)
+        glPopMatrix()
+    
+    def collision_detection(self, x, y, radius):
+        min_x = (self.x + self.col_x) - (self.width * self.depth)/2
+        max_x = (self.x + self.col_x) + (self.width * self.depth)/2
+        
+        min_y = (self.y + self.col_y) - self.depth//2
+        max_y = (self.y + self.col_y) + self.depth//2
+        
+        return (x + radius > min_x and
+                x - radius < max_x and
+                y + radius > min_y and
+                y - radius < max_y)
+        
+class ROOM:
+    def __init__(self, x, y, width, length, tile_size=50, floor_color=(0.30, 0.25, 0.20)):
+        self.x = x
+        self.y = y
+        self.z = 0
+        self.width = width
+        self.length = length
+        self.tile_size = tile_size
+        self.objects = []
+        self.floor_color = floor_color
+        
+        if self.width % 2 != 0:
+            self.width += 1
+        if self.length % 2 != 0:
+            self.length += 1
+        
+    def draw_floor(self):
+        for j in range(-self.length//2, self.length//2 + 1, 1):
+            for i in range(-self.width//2, self.width//2 + 1, 1):
+                rect_x = i*(self.tile_size + 0)
+                rect_y = j*(self.tile_size + 0)
+                distance = math.sqrt((rect_x + self.x - player.x)**2 + (rect_y + self.y - player.y)**2)
+                r, g, b = self.floor_color
+                if distance < 75:
+                    r += 0.35
+                    g += 0.25
+                    b += 0.10
+
+                elif distance < 150:
+                    r += 0.20
+                    g += 0.13
+                    b += 0.05
+
+                elif distance < 250:
+                    r += 0.08
+                    g += 0.05
+                    b += 0.02
+                draw_rect(rect_x, rect_y, self.tile_size, self.tile_size, color=(r, g, b))
+        
+    def draw(self):
+        glPushMatrix()
+        glTranslatef(self.x, self.y, self.z)
+        self.draw_floor()
+        for obj in self.objects:
+            obj.draw()
+        glPopMatrix()
+        
+    def collision_detection(self, x, y, radius):
+        for obj in self.objects:
+            try:
+                obj.update()
+            except:
+                pass
+            if obj.solid and obj.collision_detection(x, y, radius):
                 return True
         return False
-    
-class WALL_V:
-    height = 200
-    
-    def __init__(self, x, y, depth, width):
-        self.x = x
-        self.y = y
-        self.z = depth//2
-        self.depth = depth
-        self.width = width
-    
-    def draw(self):
-        glPushMatrix()
-        glColor3f(1, 0, 0)
-        glTranslatef(self.x, self.y, self.z)
-        for j in range(self.height//self.depth):
-            glPushMatrix()
-            for i in range(self.width//self.depth + 1):
-                glutSolidCube(self.depth)
-                glTranslatef(0, -self.depth, 0)
-            glPopMatrix()
-            glTranslatef(0, 0, self.depth)
-        glPopMatrix()
-    
-    def collision(self):
-        min_x = self.x - self.depth / 2
-        max_x = self.x + self.depth / 2
 
-        max_y = self.y
-        min_y = self.y - self.width
+    def keyboard_listener(self, key):
+        for obj in self.objects:
+            try:
+                obj.keyboard_listener(key)
+            except:
+                pass
 
-        if (
-            player.x + 20 > min_x and
-            player.x - 20 < max_x and
-            player.y + 20 > min_y and
-            player.y - 20 < max_y
-        ):
-            return True
+FLOOR_COLOR = (0.30, 0.25, 0.20)
+WALL_COLOR = (0.20, 0.23, 0.28)
+# FLOOR_COLOR = (1, 1, 1)
+# WALL_COLOR = (1, 1, 0)
 
-        return False
+class STARTROOM(ROOM):
+    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
+        super().__init__(x, y, width, length, tile_size, floor_color)
+        self.objects.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        self.objects.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        self.objects.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, 7, 3, 50, self.x, self.y, color=wall_color))
+        self.objects.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width - 1, 3, 50, self.x, self.y, color=wall_color))
         
-class WALL_H:
-    height = 200
-    
-    def __init__(self, x, y, depth, width):
-        self.x = x
-        self.y = y
-        self.z = depth//2
-        self.depth = depth
-        self.width = width
-    
-    def draw(self):
-        glPushMatrix()
-        glColor3f(1, 0, 0)
-        glTranslatef(self.x, self.y, self.z)
-        for j in range(self.height//self.depth):
-            glPushMatrix()
-            for i in range(self.width//self.depth + 1):
-                glutSolidCube(self.depth)
-                glTranslatef(-self.depth, 0, 0)
-            glPopMatrix()
-            glTranslatef(0, 0, self.depth)
-        glPopMatrix()
+        self.objects.append(DOOR(0, -100, 50, 60, 100, self.x, self.y))
         
-    def collision(self):
-        pass
+class TUNNEL(ROOM):
+    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
+        super().__init__(x, y, width, length, tile_size, floor_color)
+        # TOP - self.objects.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
+        # BOTTOM - self.objects.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
+        # RIGHT - self.objects.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        # LEFT - self.objects.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        RIGHT = WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color)
+        LEFT = WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color)
+        TOP = WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color)
+        BOTTOM = WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color)
+        if type == "VERTICAL":
+            self.objects.append(RIGHT)
+            self.objects.append(LEFT)
+        elif type == "HORIZONTAL":
+            self.objects.append(TOP)
+            self.objects.append(BOTTOM)
+        elif type=="TOP_LEFT":
+            self.objects.append(TOP)
+            self.objects.append(RIGHT)
+        elif type=="TOP_RIGHT":
+            self.objects.append(TOP)
+            self.objects.append(LEFT)
+        elif type=="BOTTOM_LEFT":
+            self.objects.append(BOTTOM)
+            self.objects.append(RIGHT)
+        elif type=="BOTTOM_RIGHT":
+            self.objects.append(BOTTOM)
+            self.objects.append(LEFT)
+        elif type=="BOTTOM_LEFT_RIGHT":
+            self.objects.append(BOTTOM)
+            self.objects.append(RIGHT)
+            self.objects.append(LEFT)
+        elif type=="TOP_LEFT_RIGHT":
+            self.objects.append(TOP)
+            self.objects.append(RIGHT)
+            self.objects.append(LEFT)
 
 class Player:
     x = 0
     y = 0
-    
     speed = 0
     acc = 3
     rot_acc = 5
-    
     angle = 0
     
     def __init__(self):
-        pass
+        self.rooms = []
+        
+    def add_room(self,room):
+        self.rooms.append(room)
     
     def draw(self):
         glColor3f(1, 0, 0)
@@ -207,8 +331,36 @@ class Player:
         glPopMatrix()
         
     def update(self):
-        self.x += math.sin(math.radians(self.angle)) * self.speed
-        self.y -= math.cos(math.radians(self.angle)) * self.speed
+        theta = math.radians(self.angle)
+        dx = math.sin(theta) * self.speed
+        dy = -math.cos(theta) * self.speed
+        
+        new_x = self.x + dx
+        new_y = self.y + dy
+        
+        move_x = True
+        move_y = True
+        for room in draw_rooms_list:
+            move_x = (move_x and not room.collision_detection(new_x, self.y, 30))
+            
+        for room in draw_rooms_list:
+            move_y = (move_y and not room.collision_detection(self.x, new_y, 30))
+        
+            
+        if move_x:
+            self.x = new_x
+        if move_y:
+            self.y = new_y
+            
+        # if not (start_room.collision_detection(new_x, self.y, 30) or tunnel_1.collision_detection(new_x, self.y, 30)):
+        #     self.x = new_x
+        
+        # if not (start_room.collision_detection(self.x, new_y, 30) or tunnel_1.collision_detection(self.x, new_y, 30)):
+        #     self.y = new_y
+            
+        # self.x = new_x
+        # self.y = new_y
+        
         self.speed *= 0.5
 
 class BUTTON:
@@ -222,13 +374,85 @@ class BUTTON:
         
     def draw(self):
         draw_rect(self.x, self.y, self.width, self.height, color=self.color)
-        draw_text(self.x + self.width//2 - 30, self.y-self.height//2, self.text, color=(0,0,0))
+        draw_text(self.x - len(self.text)*2, self.y, self.text, color=(0,0,0))
         
     def click(self, mouseX, mouseY, callback=None):
-        if self.y - self.height < mouseY < self.y and self.x < mouseX < self.x + self.width:
+        if self.x - self.width//2 < mouseX < self.x + self.width//2 and self.y - self.height//2 < mouseY < self.y + self.height//2:
             if callback is not None:
                 callback()
 
+class OBJECT:
+    def __init__(self, x, y, width, height):
+        pass
+
+class DOOR:
+    def __init__(self, x, y, z, width, height, col_x, col_y, solid=True):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.width = width
+        self.height = height
+        self.col_x = col_x
+        self.col_y = col_y
+        self.solid = solid
+        self.depth = 5
+        
+        self.angle = 0
+        self.closed = True
+        
+    def draw(self):
+        glPushMatrix()
+        glTranslatef(self.x, self.y, self.z)
+        glTranslatef(-self.width/2, 0, 0)
+        glRotate(self.angle, 0, 0, -1)
+        glTranslatef(self.width/2, 0, 0)
+        
+        
+        glColor3f(0.25, 0.10, 0.03)
+        glScalef(self.width, 5, self.height)
+        glutSolidCube(1)
+        glScalef(1/self.width, 1/5, 1/self.height)
+        glTranslatef(self.width/2 - 6, 0, 0)
+        glColor3f(1, 1, 0)
+        glutSolidCube(6)
+        
+        glPopMatrix()
+        
+        distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+        if distance < 35:
+            draw_text(0, -WINDOW_SIZE[1]//2 + 50, "Press \'Space\'")
+        
+    def operate(self):
+        print("PRESSED")
+    
+    def update(self):
+        if self.closed:
+            if self.angle > 0:
+                self.angle -= 1
+        else:
+            if self.angle < 90:
+                self.angle += 1
+        
+    def keyboard_listener(self, key):
+        if key == b' ':
+            distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+            if distance < 35:
+                self.closed = not self.closed
+                
+    def collision_detection(self, x, y, radius):
+        if not self.closed:
+            return False
+        min_x = (self.x + self.col_x) - self.width/2
+        max_x = (self.x + self.col_x) + self.width/2
+        
+        min_y = (self.y + self.col_y) - self.depth//2
+        max_y = (self.y + self.col_y) + self.depth//2
+        
+        return (x + radius > min_x and
+                x - radius < max_x and
+                y + radius > min_y and
+                y - radius < max_y)
+    
 
 # glutSolidCube(30)
 # gluSphere(gluNewQuadric(), 20, 10, 10)
@@ -254,7 +478,7 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18, color=(1,1,1)):
     
     # Set up an orthographic projection that matches window coordinates
     # gluOrtho2D(0, 1000, 0, 800)  # left, right, bottom, top
-    glOrtho(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2, 0, 1)
+    gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
 
     
     glMatrixMode(GL_MODELVIEW)
@@ -297,16 +521,16 @@ def draw_rect(x, y, width, height, color=(1,1,1), color1=None, color2=None,color
     glBegin(GL_QUADS)
     
     glColor3f(r, g, b)
-    glVertex3f(x, y, 0)
+    glVertex3f(x+width//2, y-height//2, 0)
     
     glColor3f(r1, g1, b1)
-    glVertex3f(x+width, y, 0)
+    glVertex3f(x-width//2, y-height//2, 0)
     
     glColor3f(r2, g2, b2)
-    glVertex3f(x+width, y-height, 0)
+    glVertex3f(x-width//2, y+height//2, 0)
     
     glColor3f(r3, g3, b3)
-    glVertex3f(x, y-height, 0)
+    glVertex3f(x+width//2, y+height//2, 0)
     glEnd()
 
 # Callbacks
@@ -315,21 +539,38 @@ def keyboardListener(key, x, y):
     Handles keyboard inputs for player movement, gun rotation, camera updates, and cheat mode toggles.
     """
     
+    global FIRST_PERSON
+    
     if key == b'w':
-        # start_room.y -= 5
-        player.speed += 3
+        player.speed += 10
     if key == b's':
-        # start_room.y += 5
-        player.speed -= 3
+        player.speed -= 10
     if key == b'a':
-        # start_room.x += 5
-        player.angle += 5
+        player.angle += 20
     if key == b'd':
-        # start_room.x -= 5
-        player.angle -= 5
+        player.angle -= 20
+    
+    if key == b'u':
+        room_to_move.y -= 5
+    if key == b'j':
+        room_to_move.y += 5
+    if key == b'h':
+        room_to_move.x += 5
+    if key == b'k':
+        room_to_move.x -= 5
         
+    if key == b'f':
+        FIRST_PERSON = not FIRST_PERSON
+        
+    if key == b' ':
+        # start_room.objects[4].closed = not start_room.objects[4].closed
+        print(room_to_move.x, room_to_move.y)
+    
     if key == b'\x1b':
         glutLeaveMainLoop()
+        
+    for room in draw_rooms_list:
+        room.keyboard_listener(key)
 
 def specialKeyListener(key, x, y):
     # Move camera up (UP arrow key)
@@ -373,7 +614,6 @@ def mouseListener(button, state, x, y):
 def idle(value=0):
     player.update()
     camera.update()
-    start_room.collision()
     glutPostRedisplay()
     glutTimerFunc(1000//FPS, idle, 0)
 
@@ -407,32 +647,54 @@ def setup_projection():
     glMatrixMode(GL_MODELVIEW)
 
 # Creating Buttons
-start_button = BUTTON(-250, 100, 500, 50, text="START")
+start_button = BUTTON(0, 100, 500, 50, text="START")
 def start_button_callback():
     global GAME_STATE
     GAME_STATE = "GAME"
-
-help_button =  BUTTON(-250, 40, 500, 50, text="HELP")
+help_button =  BUTTON(0, 40, 500, 50, text="HELP")
 def help_button_callback():
     global GAME_STATE
     GAME_STATE = "HELP"
-help_back_button =  BUTTON(-480, 325, 100, 50, text="<-Back")
+help_back_button =  BUTTON(-400, 300, 100, 50, text="Back")
 def help_back_button_callback():
     global GAME_STATE
     GAME_STATE = "MENU"
-    
-exit_button =  BUTTON(-250, -20, 500, 50, text="EXIT")
+exit_button =  BUTTON(0, -20, 500, 50, text="EXIT")
 
 # Creating Objects
-start_room = STARTROOM()
 camera = CAMERA()
+# start_room = STARTROOM()
+
+# corridor = CORRIDOR(0, 0, 500, 500)
+draw_rooms_list = []
+start_room = STARTROOM(0, 0, 20, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_1 = TUNNEL(350, -500, 6, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_2 = TUNNEL(-350, -500, 6, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_3 = TUNNEL(-450, -1050, 10, 10, type="TOP_LEFT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_4 = TUNNEL(-750, -1050, 10, 10, type="HORIZONTAL", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_5 = TUNNEL(-1300, -1050, 10, 10, type="TOP_RIGHT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_6 = TUNNEL(-1300, -550, 10, 10, type="BOTTOM_LEFT_RIGHT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+tunnel_7 = TUNNEL(350, -1035, 6, 10, type="TOP_LEFT_RIGHT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
+
+draw_rooms_list.append(start_room)
+draw_rooms_list.append(tunnel_1)
+draw_rooms_list.append(tunnel_2)
+draw_rooms_list.append(tunnel_3)
+draw_rooms_list.append(tunnel_4)
+draw_rooms_list.append(tunnel_5)
+draw_rooms_list.append(tunnel_6)
+draw_rooms_list.append(tunnel_7)
+room_to_move = start_room
+
+
 player = Player()
+
     
 def draw_menu():
     glColor3f(1, 0, 0)
-    draw_rect(-WINDOW_SIZE[0]//2, WINDOW_SIZE[1]//2, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
+    draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
-    draw_text(-12*5, 200, "3D Dungeon", font=GLUT_BITMAP_TIMES_ROMAN_24)
+    draw_text(-12*5, 200, "3D Dungeon Escape", font=GLUT_BITMAP_TIMES_ROMAN_24)
     
     start_button.draw()
     help_button.draw()
@@ -440,7 +702,7 @@ def draw_menu():
 
 def draw_help():
     glColor3f(1, 0, 0)
-    draw_rect(-WINDOW_SIZE[0]//2, WINDOW_SIZE[1]//2, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
+    draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
     draw_text(-12*5, 300, "HELP", font=GLUT_BITMAP_TIMES_ROMAN_24)
     help_back_button.draw()
@@ -484,7 +746,8 @@ def draw_brick(x, y, z, width, height,color=(1,0,0)):
     glPopMatrix()
 
 def draw_game():
-    start_room.draw()
+    for room in draw_rooms_list:
+        room.draw()
     player.draw()
     
 def showScreen():
@@ -497,7 +760,8 @@ def showScreen():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()  # Reset modelview matrix
     glViewport(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1])  # Set viewport size
-
+    
+    setup_projection()
     
     if GAME_STATE == "MENU":
         glDisable(GL_DEPTH_TEST)
