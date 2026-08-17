@@ -1,9 +1,8 @@
 # Name: Jubayer Iqbal
 # ID: 24101512
 
-# import os
-
-# os.environ["PYOPENGL_PLATFORM"] = "glx"
+import os
+os.environ["PYOPENGL_PLATFORM"] = "glx"
 
 from OpenGL.GL import *
 from OpenGL.GLUT import *
@@ -23,7 +22,8 @@ FIRST_PERSON = True
 #   - MENU
 #   - HELP
 #   - GAME
-GAME_STATE = "HELP"
+#   - ESCAPED
+GAME_STATE = "MENU"
 
 FLOOR_COLOR = (0.30, 0.25, 0.20)
 WALL_COLOR = (0.20, 0.23, 0.28)
@@ -498,7 +498,7 @@ class DOOR:
         glPopMatrix()
         
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
-        if distance < 35:
+        if distance < self.width:
             if self.locked:
                 draw_text(0, -WINDOW_SIZE[1]//2 + 50, "[LOCKED]")
             else:
@@ -510,10 +510,10 @@ class DOOR:
     def update(self):
         if self.closed:
             if self.angle > 0:
-                self.angle -= 1
+                self.angle -= 5
         else:
             if self.angle < 90:
-                self.angle += 1
+                self.angle += 5
         
     def keyboard_listener(self, key):
         if key == b' ':
@@ -961,7 +961,8 @@ def draw_escaped():
     glColor3f(1, 0, 0)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
-    draw_text(-187, 103, "GO! DON'T WASTE YOUR LIFE", font=GLUT_BITMAP_TIMES_ROMAN_24)
+    end_quote = "A NEW LIFE BEGINS"
+    draw_text(-6*len(end_quote), 100, end_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
     main_menu_button.draw()
 
 def showScreen():
