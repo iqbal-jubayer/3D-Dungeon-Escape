@@ -1,9 +1,9 @@
 # Name: Jubayer Iqbal
 # ID: 24101512
 
-import os
+# import os
 
-os.environ["PYOPENGL_PLATFORM"] = "glx"
+# os.environ["PYOPENGL_PLATFORM"] = "glx"
 
 from OpenGL.GL import *
 from OpenGL.GLUT import *
@@ -11,7 +11,7 @@ from OpenGL.GLU import *
 import math
 import random
 
-WINDOW_SIZE = (1000,800)
+WINDOW_SIZE = (720, 520)
 WINDOW_TITLE = b"3D Dungeon Escape"
 FPS = 60
 fovY = 120  # Field of view
@@ -23,7 +23,7 @@ FIRST_PERSON = True
 #   - MENU
 #   - HELP
 #   - GAME
-GAME_STATE = "GAME"
+GAME_STATE = "HELP"
 
 FLOOR_COLOR = (0.30, 0.25, 0.20)
 WALL_COLOR = (0.20, 0.23, 0.28)
@@ -416,12 +416,14 @@ class BUTTON:
         
     def draw(self):
         draw_rect(self.x, self.y, self.width, self.height, color=self.color)
-        draw_text(self.x - len(self.text)*2, self.y, self.text, color=(0,0,0))
+        draw_text(self.x-5*len(self.text), self.y, self.text, color=(0,0,0))
         
     def click(self, mouseX, mouseY, callback=None):
         if self.x - self.width//2 < mouseX < self.x + self.width//2 and self.y - self.height//2 < mouseY < self.y + self.height//2:
             if callback is not None:
                 callback()
+
+help_back_button =  BUTTON(-WINDOW_SIZE[0]//2 + 40, WINDOW_SIZE[1]//2 - 100, 100, 30, text="Back")
 
 class STATIC_OBJECT:
     def __init__(self, x, y, z, width, height, depth, isLightSource=False):
@@ -758,16 +760,16 @@ def keyboardListener(key, x, y):
         if key == b' ':
             print(room_to_move.x, room_to_move.y)
             # print(text_x, text_y)
-        
-        if key == b'\x1b':
-            # GAME_STATE = "MENU"
-            glutLeaveMainLoop()
             
         for room in room_list:
             room.keyboard_listener(key)
         
         for item in item_list:
             item.keyboard_listener(key)
+
+    if key == b'\x1b':
+        # GAME_STATE = "MENU"
+        glutLeaveMainLoop()
 
 # SHOULD BE REMOVED
 def keyboardUpListener(key, x, y):
@@ -864,7 +866,7 @@ help_button =  BUTTON(0, 40, 500, 50, text="HELP")
 def help_button_callback():
     global GAME_STATE
     GAME_STATE = "HELP"
-help_back_button =  BUTTON(-400, 300, 100, 50, text="Back")
+# help_back_button =  BUTTON(-WINDOW_SIZE[0]//2 + 40, WINDOW_SIZE[1]//2 - 100, 10, 30, text="a")
 def help_back_button_callback():
     global GAME_STATE
     GAME_STATE = "MENU"
@@ -940,7 +942,7 @@ def draw_help():
     glColor3f(1, 0, 0)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
-    draw_text(-12*5, 300, "HELP", font=GLUT_BITMAP_TIMES_ROMAN_24)
+    draw_text(0, WINDOW_SIZE[1]//2 - 100, "HELP", font=GLUT_BITMAP_TIMES_ROMAN_24)
     help_back_button.draw()
 
 def draw_game():
