@@ -23,7 +23,7 @@ FIRST_PERSON = True
 #   - HELP
 #   - GAME
 #   - ESCAPED
-GAME_STATE = "MENU"
+GAME_STATE = "GAME"
 
 FLOOR_COLOR = (0.30, 0.25, 0.20)
 WALL_COLOR = (0.20, 0.23, 0.28)
@@ -34,6 +34,24 @@ KEY_S = False
 KEY_D = False
 
 # classes
+class BUTTON:
+    def __init__(self,x,y,width,height,color=(1,1,1),text="Button"):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.color = color
+        self.text = text
+        
+    def draw(self):
+        draw_rect(self.x, self.y, self.width, self.height, color=self.color)
+        draw_text(self.x-5*len(self.text), self.y, self.text, color=(0,0,0))
+        
+    def click(self, mouseX, mouseY, callback=None):
+        if self.x - self.width//2 < mouseX < self.x + self.width//2 and self.y - self.height//2 < mouseY < self.y + self.height//2:
+            if callback is not None:
+                callback()
+
 class CAMERA:
     camera_x = 0
     camera_y = 0
@@ -42,45 +60,54 @@ class CAMERA:
     target_x = 0
     target_y = 0
     target_z = 0
+    
+    target_up = 0
 
     def __init__(self):
-        self.distance = 80
+        self.distance = 40
 
     def update(self):
+        theta = math.radians(player.angle)
+        fx = math.sin(theta)
+        fy = -math.cos(theta)
+        
         if not FIRST_PERSON:
+            self.camera_x = player.x - fx * self.distance
+            self.camera_y = player.y - fy * self.distance
+            
             self.camera_x = player.x
-            self.camera_y = player.y + 100
-            self.camera_z = 1000
+            self.camera_y = player.y + self.distance
+            self.camera_z = 500
             
             self.target_x = player.x
             self.target_y = player.y
             self.target_z = 0
             return
-        theta = math.radians(player.angle)
-        fx = math.sin(theta)
-        fy = -math.cos(theta)
         
         self.camera_x = player.x - fx * self.distance
         self.camera_y = player.y - fy * self.distance
-        self.camera_z = 120
+        self.camera_z = (player.z - player.height//2) + player.height * 1.2
         
-        self.target_x = player.x
-        self.target_y = player.y
-        self.target_z = 90
-        
-class WALL_VERTICAL:
-    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1), solid=True):
-        self.x = x
-        self.y = y
-        self.z = height//2 * depth + depth//2
-        self.width = width
-        self.height = height
-        self.depth = depth
-        self.col_x = col_x
-        self.col_y = col_y
-        self.color = color
-        self.solid = solid
-        
+        self.target_x = player.x + fx * self.distance
+        self.target_y = player.y + fy * self.distance
+        self.target_z = (player.z - player.height) + player.height * 1
+
+class WALL:
+    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1), orientaion=0):
+            # orientaion-
+            #   0. Vertical
+            #   1. Horizontal
+            self.x = x
+            self.y = y
+            self.z = height//2 * depth + depth//2
+            self.width = width
+            self.height = height
+            self.depth = depth
+            self.col_x = col_x
+            self.col_y = col_y
+            self.color = color
+            self.orientaion = orientaion
+            
     def draw(self):
         glPushMatrix()
         r, g, b = self.color
@@ -101,71 +128,41 @@ class WALL_VERTICAL:
             b += 0.02
         glColor3f(r, g, b)
         glTranslatef(self.x, self.y, self.z)
-        glScalef(self.depth, self.width * self.depth, self.height * self.depth)
+        if self.orientaion == 0:
+            glScalef(self.depth, self.width * self.depth, self.height * self.depth)
+        else:
+            glScalef(self.width * self.depth, self.depth, self.height * self.depth)
         glutSolidCube(1)
         glPopMatrix()
-    
-    def collision_detection(self, x, y, radius):
-        min_y = (self.y + self.col_y) - (self.width * self.depth)/2
-        max_y = (self.y + self.col_y) + (self.width * self.depth)/2
         
-        min_x = (self.x + self.col_x) - self.depth//2
-        max_x = (self.x + self.col_x) + self.depth//2
+    def collision_detection(self, x, y, radius):
+        if self.orientaion == 0:
+            min_x = (self.x + self.col_x) - self.depth//2
+            max_x = (self.x + self.col_x) + self.depth//2
+            
+            min_y = (self.y + self.col_y) - (self.width * self.depth)/2
+            max_y = (self.y + self.col_y) + (self.width * self.depth)/2
+        else:
+            min_x = (self.x + self.col_x) - (self.width * self.depth)/2
+            max_x = (self.x + self.col_x) + (self.width * self.depth)/2
+            
+            min_y = (self.y + self.col_y) - self.depth//2
+            max_y = (self.y + self.col_y) + self.depth//2
+        
         
         return (x + radius > min_x and
                 x - radius < max_x and
                 y + radius > min_y and
                 y - radius < max_y)
+   
+class WALL_VERTICAL(WALL):
+    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1)):
+        super().__init__(x, y, width, height, depth, col_x, col_y, color, 0)
         
-class WALL_HORIZONTAL:
-    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1, 1, 1), solid=True):
-        self.x = x
-        self.y = y
-        self.z = height//2 * depth + depth//2
-        self.width = width
-        self.height = height
-        self.depth = depth
-        self.col_x = col_x
-        self.col_y = col_y
-        self.color = color
-        self.solid = solid
-        
-    def draw(self):
-        glPushMatrix()
-        r, g, b = self.color
-        distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
-        if distance < 75:
-            r += 0.35
-            g += 0.25
-            b += 0.10
+class WALL_HORIZONTAL(WALL):
+    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1)):
+            super().__init__(x, y, width, height, depth, col_x, col_y, color, 1)
 
-        elif distance < 150:
-            r += 0.20
-            g += 0.13
-            b += 0.05
-
-        elif distance < 250:
-            r += 0.08
-            g += 0.05
-            b += 0.02
-        glColor3f(r, g, b)
-        glTranslatef(self.x, self.y, self.z)
-        glScalef(self.width * self.depth, self.depth, self.height * self.depth)
-        glutSolidCube(1)
-        glPopMatrix()
-    
-    def collision_detection(self, x, y, radius):
-        min_x = (self.x + self.col_x) - (self.width * self.depth)/2
-        max_x = (self.x + self.col_x) + (self.width * self.depth)/2
-        
-        min_y = (self.y + self.col_y) - self.depth//2
-        max_y = (self.y + self.col_y) + self.depth//2
-        
-        return (x + radius > min_x and
-                x - radius < max_x and
-                y + radius > min_y and
-                y - radius < max_y)
-        
 class ROOM:
     def __init__(self, x, y, width, length, tile_size=50, floor_color=(0.30, 0.25, 0.20)):
         self.x = x
@@ -174,7 +171,8 @@ class ROOM:
         self.width = width
         self.length = length
         self.tile_size = tile_size
-        self.objects = []
+        
+        self.walls = []
         self.floor_color = floor_color
         
         if self.width % 2 != 0:
@@ -255,24 +253,18 @@ class ROOM:
         glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
         self.draw_floor()
-        for obj in self.objects:
+        for obj in self.walls:
             obj.draw()
         glPopMatrix()
         
     def collision_detection(self, x, y, radius):
-        for obj in self.objects:
-            try:
-                obj.update()
-            except:
-                pass
+        for obj in self.walls:
             if obj.collision_detection(x, y, radius):
-                if obj.solid:
-                    return True
-                return False
+                return True
         return False
 
     def keyboard_listener(self, key):
-        for obj in self.objects:
+        for obj in self.walls:
             try:
                 obj.keyboard_listener(key)
             except:
@@ -281,99 +273,268 @@ class ROOM:
 class STARTROOM(ROOM):
     def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
         super().__init__(x, y, width, length, tile_size, floor_color)
-        self.objects.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        self.objects.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        self.objects.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, 16, 3, 50, self.x, self.y, color=wall_color))
-        self.objects.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width, 3, 50, self.x, self.y, color=wall_color))
+        self.walls.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        self.walls.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        self.walls.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, 16, 3, 50, self.x, self.y, color=wall_color))
+        self.walls.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width, 3, 50, self.x, self.y, color=wall_color))
         
 class TUNNEL(ROOM):
     def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
         super().__init__(x, y, width, length, tile_size, floor_color)
-        # TOP - self.objects.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
-        # BOTTOM - self.objects.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
-        # RIGHT - self.objects.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        # LEFT - self.objects.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        # TOP - self.walls.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
+        # BOTTOM - self.walls.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
+        # RIGHT - self.walls.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
+        # LEFT - self.walls.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
         RIGHT = WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color)
         LEFT = WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color)
         TOP = WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color)
         BOTTOM = WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color)
         if type == "VERTICAL":
-            self.objects.append(RIGHT)
-            self.objects.append(LEFT)
+            self.walls.append(RIGHT)
+            self.walls.append(LEFT)
         elif type == "HORIZONTAL":
-            self.objects.append(TOP)
-            self.objects.append(BOTTOM)
+            self.walls.append(TOP)
+            self.walls.append(BOTTOM)
         elif type=="TOP_LEFT":
-            self.objects.append(TOP)
-            self.objects.append(RIGHT)
+            self.walls.append(TOP)
+            self.walls.append(RIGHT)
         elif type=="TOP_RIGHT":
-            self.objects.append(TOP)
-            self.objects.append(LEFT)
+            self.walls.append(TOP)
+            self.walls.append(LEFT)
         elif type=="BOTTOM_LEFT":
-            self.objects.append(BOTTOM)
-            self.objects.append(RIGHT)
+            self.walls.append(BOTTOM)
+            self.walls.append(RIGHT)
         elif type=="BOTTOM_RIGHT":
-            self.objects.append(BOTTOM)
-            self.objects.append(LEFT)
+            self.walls.append(BOTTOM)
+            self.walls.append(LEFT)
         elif type=="BOTTOM_LEFT_RIGHT":
-            self.objects.append(BOTTOM)
-            self.objects.append(RIGHT)
-            self.objects.append(LEFT)
+            self.walls.append(BOTTOM)
+            self.walls.append(RIGHT)
+            self.walls.append(LEFT)
         elif type=="TOP_LEFT_RIGHT":
-            self.objects.append(TOP)
-            self.objects.append(RIGHT)
-            self.objects.append(LEFT)
+            self.walls.append(TOP)
+            self.walls.append(RIGHT)
+            self.walls.append(LEFT)
 
 class Player:
     x = 0
     y = 0
+    z = 0
+    
+    health = 100
+    max_health = 100
+    
+    shield = 100
+    max_shield = 100
+    
     speed = 0
     acc = 3
+    
     rot_acc = 5
     angle = 0
+    
     keys = []
+    
+    leg_angle = 0
+    leg_angle_dir = 1
+    leg_angle_limit = 20
+    
+    armor_on = True
+    
+    speedZ = 0
     
     def __init__(self, x, y):
         self.x = x
         self.y = y
         
+        self.width = 30
+        self.depth = 10
+        self.height = 80
+        self.z = self.height//2
         self.rooms = []
         self.keys = []
     
+    b = True
+    a = True
+    t = 5
+    t_max = 2
+    
     def draw(self):
         glColor3f(1, 0, 0)
-        glPushMatrix()
-        glTranslatef(self.x, self.y, 20)
+        glTranslatef(self.x, self.y, self.z)
         glRotatef(self.angle, 0, 0, 1)
-        glutSolidCube(40)
-        glTranslatef(0, 0, 20)
-        glutSolidCube(40)
-        glPopMatrix()
         
+        # if self.b:
+        #     if self.a:
+        #         glTranslatef(-1, 0, 0)
+        #     else:
+        #         glTranslatef(1, 0, 0)
+        #     if self.t <= 0:
+        #         self.a = not self.a
+        #         self.t = self.t_max
+        #     self.t -= 1
+        #     self.b = False
         
-        
-        
-        glMatrixMode(GL_PROJECTION)
         glPushMatrix()
-        glLoadIdentity()
-        gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
-        glMatrixMode(GL_MODELVIEW)
-        glPushMatrix()
-        glLoadIdentity()
-        draw_text(-WINDOW_SIZE[0]//2, WINDOW_SIZE[1]//2 - 100, "KEYS: ")
-        for i in range(len(self.keys)):
-            x = -WINDOW_SIZE[0]//2 + 80 + i*45
-            y = WINDOW_SIZE[1]//2 - 92
-            draw_rect(x, y, 30, 5, color=self.keys[i][1])
-            draw_rect(x-12.5, y-5, 5, 10, color=self.keys[i][1])
-            draw_rect(x-5, y-5, 5, 10, color=self.keys[i][1])
-            draw_rect(x + 15, y, 10, 10, color=self.keys[i][1])
-        # Restore original projection and modelview matrices
-        glPopMatrix()
-        glMatrixMode(GL_PROJECTION)
-        glPopMatrix()
-        glMatrixMode(GL_MODELVIEW)
         
+        # Head
+        glPushMatrix()
+        glColor3f(0.72, 0.45, 0.25)
+        glTranslatef(0, 0, self.height//2 - self.height*0.1)
+        glScalef(self.width*0.5, self.width*0.5, 0.2 * self.height)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        if self.armor_on:
+            # Halmet
+            glPushMatrix()
+            glColor3f(0.10, 0.65, 0.75)
+            glTranslatef(0, 0, self.height*(0.5-0.05))
+            glScalef(self.width*0.6, self.width*0.6, self.height*0.12)
+            glutSolidCube(1)
+            glPopMatrix()
+        
+        
+        # Body
+        glPushMatrix()
+        glColor3f(0.25, 0.35, 0.12)
+        if self.armor_on:
+            glColor3f(0.08, 0.55, 0.65)
+        glTranslatef(0, 0, self.height*0.5 - self.height*0.45)
+        glScalef(self.width, self.depth, self.height*0.5)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        
+        # Right Leggings
+        glPushMatrix()
+        glTranslatef(0, 0, -self.height*0.5 + self.height*0.3)
+        glRotatef(self.leg_angle, 1, 0, 0)
+        glTranslatef(0, 0, -(-self.height*0.5 + self.height*0.3))
+        # Right Leg
+        glPushMatrix()
+        glColor3f(0.20, 0.12, 0.07)
+        if self.armor_on:
+            glColor3f(0.06, 0.42, 0.50)
+        glTranslatef(0, 0, -self.height*0.5 + self.height*0.15)
+        glTranslatef(-self.width*0.25, 0, 0)
+        glScalef(self.width*0.4, self.depth, self.height*0.3)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        # Right Boot
+        glPushMatrix()
+        glColor3f(0.12, 0.07, 0.04)
+        if self.armor_on:
+            glColor3f(0.05, 0.35, 0.42)
+        glTranslatef(0, 0, -self.height*0.5 + self.height*0.05)
+        glTranslatef(-self.width*0.25, 0, 0)
+        glScalef(self.width//2, self.depth+1, self.height*0.1)
+        glutSolidCube(1)
+        glPopMatrix()
+        glPopMatrix()
+        
+        
+        # Left Leggings
+        glPushMatrix()
+        glTranslatef(0, 0, -self.height*0.5 + self.height*0.3)
+        glRotatef(self.leg_angle, -1, 0, 0)
+        # Left Leg - upper
+        glTranslatef(0, 0, -(-self.height*0.5 + self.height*0.3))
+        glPushMatrix()
+        glColor3f(0.20, 0.12, 0.07)
+        if self.armor_on:
+            glColor3f(0.06, 0.42, 0.50)
+        glTranslatef(0, 0, -self.height*0.5 + self.height*0.15)
+        glTranslatef(self.width*0.25, 0, 0)
+        glScalef(self.width*0.4, self.depth, self.height*0.3)
+        glutSolidCube(1)
+        glScalef(1/(self.width*0.4), 1/self.depth, 1/(self.height*0.3))
+        glPopMatrix()
+        
+        # Left Boot
+        glPushMatrix()
+        glColor3f(0.12, 0.07, 0.04)
+        if self.armor_on:
+            glColor3f(0.05, 0.35, 0.42)
+        glTranslatef(0, 0, -self.height*0.5 + self.height*0.05)
+        glTranslatef(self.width*0.25, 0, 0)
+        glScalef(self.width//2, self.depth+1, self.height*0.1)
+        glutSolidCube(1)
+        glPopMatrix()
+        glPopMatrix()
+        
+        
+        # Left Hand
+        glPushMatrix()
+        glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
+        glRotate(self.leg_angle, 1, 0, 0)
+        glTranslatef(-self.width*0.6, 0, -(self.height*0.3 - self.height*0.1))
+        
+        # Left Arm
+        glPushMatrix()
+        glColor3f(0.72, 0.45, 0.25)
+        glTranslatef(self.width*0.6, 0, self.height*0.1)
+        glScalef(self.width*0.2, self.depth, self.height*0.4)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        # Left Shoulder
+        glPushMatrix()
+        glColor3f(0.25, 0.35, 0.12)
+        if self.armor_on:
+            glColor3f(0.07, 0.45, 0.52)
+        glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
+        glScalef(self.width*0.2+1, self.depth+1, self.height*0.2+1)
+        glutSolidCube(1)
+        glPopMatrix()
+        glPopMatrix()
+        
+        # Right Hand
+        glPushMatrix()
+        glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
+        glRotate(self.leg_angle, -1, 0, 0)
+        glTranslatef(-self.width*0.6, 0, -(self.height*0.3 - self.height*0.1))
+        
+        # Right Arm
+        glPushMatrix()
+        glColor3f(0.72, 0.45, 0.25)
+        glTranslatef(-self.width*0.6, 0, self.height*0.1)
+        glScalef(self.width*0.2, self.depth, self.height*0.4)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        # Right Shoulder
+        glPushMatrix()
+        glColor3f(0.25, 0.35, 0.12)
+        if self.armor_on:
+            glColor3f(0.07, 0.45, 0.52)
+        glTranslatef(-self.width*0.6, 0, self.height*0.3 - self.height*0.1)
+        glScalef(self.width*0.2+1, self.depth+1, self.height*0.2+1)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glPopMatrix()
+        glPopMatrix()
+        
+    def move_leg(self):
+        self.leg_angle += 1 * self.leg_angle_dir
+        if self.leg_angle > self.leg_angle_limit:
+            self.leg_angle = self.leg_angle_limit
+            self.leg_angle_dir *= -1
+        if self.leg_angle < -self.leg_angle_limit:
+            self.leg_angle = -self.leg_angle_limit
+            self.leg_angle_dir *= -1
+    
+    def damage(self, point):
+        self.b = True
+        if self.armor_on:
+            self.shield -= point*1.5
+            if self.shield <= 0:
+                self.armor_on = False
+        else:
+            self.health -= point
+      
     def update(self):
         if KEY_W:
             self.speed += 3
@@ -397,33 +558,25 @@ class Player:
             move_x = (move_x and not item.collision_detection(new_x, self.y, 30))
             move_y = (move_y and not item.collision_detection(self.x, new_y, 30))
         
+        if abs(self.x - new_x) > 0.1 or abs(self.y - new_y) > 0.1:
+            self.move_leg()
+        else:
+            self.leg_angle = 0
             
         if move_x:
             self.x = new_x
+            
         if move_y:
             self.y = new_y
-        
+            
         self.speed *= 0.5
-
-class BUTTON:
-    def __init__(self,x,y,width,height,color=(1,1,1),text="Button"):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.color = color
-        self.text = text
         
-    def draw(self):
-        draw_rect(self.x, self.y, self.width, self.height, color=self.color)
-        draw_text(self.x-5*len(self.text), self.y, self.text, color=(0,0,0))
-        
-    def click(self, mouseX, mouseY, callback=None):
-        if self.x - self.width//2 < mouseX < self.x + self.width//2 and self.y - self.height//2 < mouseY < self.y + self.height//2:
-            if callback is not None:
-                callback()
+        self.z += self.speedZ
+        self.speedZ -= 0.5
 
-help_back_button =  BUTTON(-WINDOW_SIZE[0]//2 + 40, WINDOW_SIZE[1]//2 - 100, 100, 30, text="Back")
+        if self.z <= self.height // 2:
+            self.z = self.height // 2
+            self.speedZ = 0
 
 class STATIC_OBJECT:
     def __init__(self, x, y, z, width, height, depth, isLightSource=False):
@@ -503,9 +656,6 @@ class DOOR:
                 draw_text(0, -WINDOW_SIZE[1]//2 + 50, "[LOCKED]")
             else:
                 draw_text(0, -WINDOW_SIZE[1]//2 + 50, "Press \'Space\'")
-        
-    def operate(self):
-        print("PRESSED")
     
     def update(self):
         if self.closed:
@@ -518,7 +668,7 @@ class DOOR:
     def keyboard_listener(self, key):
         if key == b' ':
             distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
-            if distance < 40:
+            if distance < self.width:
                 if not self.locked:
                     self.closed = not self.closed
                 elif any(name==self.required_key_name for name, color in player.keys):
@@ -635,6 +785,134 @@ class KEY(ITEM):
         self.active = False
         player.keys.append((self.name, self.color))
 
+class HUD:
+    def __init__(self):
+        pass
+    
+    def draw_key_hud(self):
+        draw_text(-WINDOW_SIZE[0]//2 + 10, WINDOW_SIZE[1]//2 - 100 - 20, "KEYS: ")
+        for i in range(len(player.keys)):
+            x = -WINDOW_SIZE[0]//2 + 90 + i*45
+            y = WINDOW_SIZE[1]//2 - 92 - 20
+            draw_rect(x, y, 30, 5, color=player.keys[i][1])
+            draw_rect(x-12.5, y-5, 5, 10, color=player.keys[i][1])
+            draw_rect(x-5, y-5, 5, 10, color=player.keys[i][1])
+            draw_rect(x + 15, y, 10, 10, color=player.keys[i][1])
+            
+    def draw_player_health(self):
+        draw_text(-350, 205, "Player")
+        bar_color = (0, 1, 0)
+        if player.health < 20:
+            bar_color = (1, 0, 0)
+        elif player.health < 50:
+            bar_color = (1, 1, 0)
+        draw_rect(-275 - (150 - (150 * (player.health/100)))//2, 210, 150 * (player.health/100), 20, bar_color)
+        
+    def draw_player_shield(self):
+        if not player.armor_on:
+            return
+        draw_text(-350, 180, "Shield")
+        bar_color = (0.10, 0.65, 0.75)
+        draw_rect(-275 - (150 - (150 * (player.shield/100)))//2, 185, 150 * (player.shield/100), 20, bar_color)
+    
+    def draw(self):
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        
+        self.draw_key_hud()
+        self.draw_player_health()
+        self.draw_player_shield()
+            
+            
+        # Restore original projection and modelview matrices
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+    
+    def update(self):
+        pass
+
+class SPIKETRAP:
+    def __init__(self, x, y, z, width, height):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.width = width
+        self.height = height
+        self.damage = 20
+            
+    def draw(self):
+        glPushMatrix()
+        glColor3f(0.18, 0.16, 0.14)
+        glTranslatef(self.x, self.y, self.z)
+        glScalef(self.width, self.width, 1)
+        glutSolidCube(1)
+        glScalef(1/self.width, 1/self.width, 1)
+        
+        glColor3f(0.32, 0.35, 0.38)
+        glTranslatef(self.width/2 - 6, -self.width//2 + 8, 0)
+        for j in range(4):
+            for i in range(4):
+                gluCylinder(gluNewQuadric(), self.width/10, 0, 30, 10, 10)
+                glTranslatef(-self.width/4, 0, 0)
+            glTranslatef(self.width, self.width/4, 0)
+            
+        glTranslatef(0, -self.width, 18)
+        
+        glColor3f(0.55, 0.58, 0.62)
+        for j in range(4):
+            for i in range(4):
+                gluCylinder(gluNewQuadric(), self.width/20, 0, 12, 10, 10)
+                glTranslatef(-self.width/4, 0, 0)
+            glTranslatef(self.width, self.width/4, 0)
+        
+        glPopMatrix()
+    
+    def update(self):
+        distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+        if distance < self.width//2 + player.width//2 and player.z - player.height//2 < self.height:
+            player.damage(self.damage)
+            player.speed -= 20
+
+class POISONTRAP:
+    def __init__(self, x, y, z, width, height):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.width = width
+        self.height = height
+        self.damage = 0.05
+            
+    def draw(self):
+        glPushMatrix()
+        glColor3f(0.45, 0.10, 0.55)
+        glTranslatef(self.x, self.y, self.z)
+        glScalef(self.width, self.width, 1)
+        glutSolidCube(1)
+        glScalef(1/self.width, 1/self.width, 1)
+        
+        glColor3f(0.40, 0.75, 0.05)
+        glTranslatef(self.width/2 - 6, -self.width//2 + 8, 0)
+        for j in range(4):
+            for i in range(4):
+                glutSolidCube(2)
+                glTranslatef(-self.width/4, 0, 0)
+            glTranslatef(self.width, self.width/4, 0)
+        
+        glPopMatrix()
+    
+    def update(self):
+        distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+        if distance < self.width//2 + player.width//2 and player.z - player.height//2 < self.height:
+            player.damage(self.damage)
+            # player.speed -= 20
+
 # glutSolidCube(30)
 # gluSphere(gluNewQuadric(), 20, 10, 10)
 # gluCylinder(gluNewQuadric(), 8, 3, 30, 10, 10)
@@ -743,23 +1021,29 @@ def keyboardListener(key, x, y):
         
         if key == b'u':
             room_to_move.y -= 10
-            debug.text_y += 1
+            debug.text_y += 50
         if key == b'j':
             room_to_move.y += 10
-            debug.text_y -= 1
+            debug.text_y -= 50
         if key == b'h':
             room_to_move.x += 10
-            debug.text_x -= 1
+            debug.text_x -= 50
         if key == b'k':
             room_to_move.x -= 10
-            debug.text_x += 1
+            debug.text_x += 50
             
-        if key == b'f':
+        if key == b'z':
+            player.armor_on = not player.armor_on
+            
+        if key == b'v':
             FIRST_PERSON = not FIRST_PERSON
             
         if key == b' ':
-            print(room_to_move.x, room_to_move.y)
-            # print(text_x, text_y)
+            # player.armor_on = not player.armor_on
+            # print(room_to_move.x, room_to_move.y)
+            # print(debug.text_x, debug.text_y)
+            player.speedZ = 8
+            pass
             
         for room in room_list:
             room.keyboard_listener(key)
@@ -782,19 +1066,19 @@ def keyboardUpListener(key, x, y):
 def specialKeyListener(key, x, y):
     # Move camera up (UP arrow key)
     if key == GLUT_KEY_UP:
-        camera.camera_z -= 5
+        camera.target_up += 5
         
     # Move camera down (DOWN arrow key)
     if key == GLUT_KEY_DOWN:
-        camera.camera_z += 5
+        camera.target_up -= 5
         
     # moving camera left (LEFT arrow key)
     if key == GLUT_KEY_LEFT:
-        start_room.angle += 1
+        pass
 
     # moving camera right (RIGHT arrow key)
     if key == GLUT_KEY_RIGHT:
-        start_room.angle -= 1
+        pass
 
 def mouseListener(button, state, x, y):
     x, y = convert_coordinate(x, y)
@@ -821,8 +1105,11 @@ def idle(value=0):
     if GAME_STATE == 'GAME':
         player.update()
         camera.update()
+        hud.update()
         for item in item_list:
             item.update()
+        for trap in trap_list:
+            trap.update()
         
     glutPostRedisplay()
     glutTimerFunc(1000//FPS, idle, 0)
@@ -866,7 +1153,7 @@ help_button =  BUTTON(0, 40, 500, 50, text="HELP")
 def help_button_callback():
     global GAME_STATE
     GAME_STATE = "HELP"
-# help_back_button =  BUTTON(-WINDOW_SIZE[0]//2 + 40, WINDOW_SIZE[1]//2 - 100, 10, 30, text="a")
+help_back_button =  BUTTON(-WINDOW_SIZE[0]//2 + 40, WINDOW_SIZE[1]//2 - 100, 100, 30, text="Back")
 def help_back_button_callback():
     global GAME_STATE
     GAME_STATE = "MENU"
@@ -882,13 +1169,16 @@ camera = CAMERA()
 room_list = []
 item_list = []
 static_item_list = []
+enemy_list = []
+trap_list = []
 
 room_to_move = None
 
 player = None
+hud = None
 
 def game_init():
-    global item_list, static_item_list, room_list, room_to_move, player
+    global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list
     
     room_list = []
     start_room = STARTROOM(0, 0, 20, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
@@ -922,7 +1212,13 @@ def game_init():
     torch = TORCH(-240, -1250, 50, 20, 100, 20)
     static_item_list.append(torch)
     
+    for i in range(9):
+        trap_list.append(SPIKETRAP(-1500 + i * 50, -650, 0, 50, 30))
+        
+    trap_list.append(POISONTRAP(0, -100, 0, 50, 1))
+    
     player = Player(0, 0)
+    hud = HUD()
     
     room_to_move = escape_door
 
@@ -955,7 +1251,11 @@ def draw_game():
     for item in static_item_list:
         item.draw()
         
+    for trap in trap_list:
+        trap.draw()
+        
     player.draw()
+    hud.draw()
 
 def draw_escaped():
     glColor3f(1, 0, 0)
