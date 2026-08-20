@@ -16,7 +16,7 @@ FPS = 60
 fovY = 120  # Field of view
 
 # GAME CONSTANTS
-FIRST_PERSON = False
+FIRST_PERSON = True
 
 # GAME_STATE
 #   - MENU
@@ -122,19 +122,19 @@ class UNIT_WALL:
         r, g, b = self.color
         distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
         if distance < 75:
-            r += 0.35
-            g += 0.25
-            b += 0.10
+            r += 0.15
+            g += 0.10
+            b += 0.04
 
         elif distance < 150:
-            r += 0.20
-            g += 0.13
-            b += 0.05
-
-        elif distance < 250:
             r += 0.08
             g += 0.05
             b += 0.02
+
+        elif distance < 250:
+            r += 0.03
+            g += 0.02
+            b += 0.01
         glColor3f(r, g, b)
         
         glPushMatrix()
@@ -201,19 +201,19 @@ class ROOM:
         distance = math.sqrt((rect_x + self.x - player.x)**2 + (rect_y + self.y - player.y)**2)
         r, g, b = self.floor_color
         if distance < 75:
-            r += 0.35
-            g += 0.25
-            b += 0.10
+            r += 0.15
+            g += 0.10
+            b += 0.04
 
         elif distance < 150:
-            r += 0.20
-            g += 0.13
-            b += 0.05
-
-        elif distance < 250:
             r += 0.08
             g += 0.05
             b += 0.02
+
+        elif distance < 250:
+            r += 0.03
+            g += 0.02
+            b += 0.01
         return r, g, b
         
     def draw_floor(self):
@@ -288,7 +288,7 @@ class ROOM:
                 pass
 
 class STARTROOM(ROOM):
-    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20), door_at="tblf"):
+    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.08, 0.10, 0.13), floor_color=(0.12, 0.10, 0.08), door_at="tblf", gap_at=""):
         super().__init__(x, y, width, length, tile_size, floor_color)
         
         wall_height = 100
@@ -318,29 +318,29 @@ class STARTROOM(ROOM):
         if "t" in door_at:
             self.walls.extend(TOP_LEFT)
             self.walls.extend(TOP_RIGHT)
-        else:
+        elif "t" not in gap_at:
             self.walls.extend(TOP_WALL)
             
         if "b" in door_at:
             self.walls.extend(BOTTOM_LEFT)
             self.walls.extend(BOTTOM_RIGHT)
-        else:
+        elif "b" not in gap_at:
             self.walls.extend(BOTTOM_WALL)
             
         if "r" in door_at:
             self.walls.extend(RIGHT_TOP)
             self.walls.extend(RIGHT_BOTTOM)
-        else:
+        elif "r" not in gap_at:
             self.walls.extend(RIGHT_WALL)
                     
         if "l" in door_at:
             self.walls.extend(LEFT_TOP)
             self.walls.extend(LEFT_BOTTOM)
-        else:
+        elif "l" not in gap_at:
             self.walls.extend(LEFT_WALL)
             
 class TUNNEL(ROOM):
-    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
+    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.08, 0.10, 0.13), floor_color=(0.12, 0.10, 0.08)):
         super().__init__(x, y, width, length, tile_size, floor_color)
         
         wall_height = 100
@@ -360,10 +360,6 @@ class TUNNEL(ROOM):
             self.walls.extend(RIGHT)
 
 class Player:
-    x = 0
-    y = 0
-    z = 0
-    
     health = 100
     max_health = 100
     
@@ -382,7 +378,7 @@ class Player:
     leg_angle_dir = 1
     leg_angle_limit = 20
     
-    armor_on = True
+    armor_on = False
     
     speedZ = 0
     
@@ -394,7 +390,6 @@ class Player:
         self.depth = 10
         self.height = 80
         self.z = self.height//2
-        self.rooms = []
         self.keys = []
     
     def draw(self):
@@ -668,8 +663,8 @@ class DOOR:
         glTranslatef(-self.width/2, 0, 0)
         glRotate(self.angle, 0, 0, -1)
         glTranslatef(self.width/2, 0, 0)
-        glColor3f(0.25, 0.10, 0.03)
-        # glColor4f(0.25, 0.10, 0.03, 0.8)
+        door_color = (0.22, 0.09, 0.025)
+        glColor3f(0.18, 0.17, 0.15)
         glScalef(self.width, 5, self.height)
         glutSolidCube(1)
         glScalef(1/self.width, 1/5, 1/self.height)
@@ -682,7 +677,7 @@ class DOOR:
         if distance < self.width:
             if self.locked:
                 draw_text(0, -WINDOW_SIZE[1]//2 + 50, "[LOCKED]")
-            else:
+            elif self.closed:
                 draw_text(0, -WINDOW_SIZE[1]//2 + 50, "Press \'Space\'")
     
     def update(self):
@@ -694,7 +689,7 @@ class DOOR:
                 self.angle += 5
         
     def keyboard_listener(self, key):
-        if key == b' ':
+        if key == b' ' and self.closed:
             distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
             if distance < self.width:
                 if not self.locked:
@@ -828,7 +823,7 @@ class HUD:
             draw_rect(x + 15, y, 10, 10, color=player.keys[i][1])
             
     def draw_player_health(self):
-        draw_text(-350, 205, "Player")
+        draw_text(-350, 205, f"Player {int(player.health)}/100")
         bar_color = (0, 1, 0)
         if player.health < 20:
             bar_color = (1, 0, 0)
@@ -1224,10 +1219,13 @@ def game_init():
         TUNNEL(-790, -350, 3, 3,type='bl'),
         TUNNEL(-1040, -350, 5, 3,type='tb'),
         STARTROOM(-1440, -350, 10, 10, door_at='l'),
+        TUNNEL(610, -850, 3, 3,type='lb'),
+        STARTROOM(610, -1100, 3, 6, door_at='t', gap_at='b'),
     ]
     
     item_list = [
-        KEY(-1440, -350, 0, 20, 20, 20, 20, (1, 0, 0)),
+        KEY(-1440, -350, 0, 20, 20, 20, 20, (1, 0, 0), name="0x0001"),
+        DOOR(610, -1270, 50, 50, 100, required_key_name="0x0001"),
     ]
     
     trap_list = [
@@ -1238,8 +1236,8 @@ def game_init():
         POISONTRAP(-1440, -350, 0, 50, 2),
     ]
     
-    room_to_move = POISONTRAP(-1440, -350, 0, 50, 50)
-    trap_list.append(room_to_move)
+    room_to_move = STARTROOM(610, -1400, 6, 6, door_at='b', gap_at='')
+    room_list.append(room_to_move)
 
 game_init()
  
