@@ -16,7 +16,7 @@ FPS = 60
 fovY = 120  # Field of view
 
 # GAME CONSTANTS
-FIRST_PERSON = True
+FIRST_PERSON = False
 
 # GAME_STATE
 #   - MENU
@@ -71,6 +71,19 @@ class CAMERA:
         fx = math.sin(theta)
         fy = -math.cos(theta)
         
+        if False:
+            self.camera_x = player.x - fx * self.distance
+            self.camera_y = player.y - fy * self.distance
+            
+            self.camera_x = player.x
+            self.camera_y = player.y + self.distance
+            self.camera_z = 1000
+            
+            self.target_x = player.x
+            self.target_y = player.y
+            self.target_z = 0
+            return
+        
         if not FIRST_PERSON:
             self.camera_x = player.x - fx * self.distance
             self.camera_y = player.y - fy * self.distance
@@ -92,24 +105,20 @@ class CAMERA:
         self.target_y = player.y + fy * self.distance
         self.target_z = (player.z - player.height) + player.height * 1
 
-class WALL:
-    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1), orientaion=0):
-            # orientaion-
-            #   0. Vertical
-            #   1. Horizontal
-            self.x = x
-            self.y = y
-            self.z = height//2 * depth + depth//2
-            self.width = width
-            self.height = height
-            self.depth = depth
-            self.col_x = col_x
-            self.col_y = col_y
-            self.color = color
-            self.orientaion = orientaion
-            
+class UNIT_WALL:
+    def __init__(self, x, y, z, width, depth, height, colx, coly, color=(1, 0, 0), orientaion=0):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.width = width
+        self.depth = depth
+        self.height = height
+        self.col_x = colx
+        self.col_y = coly
+        self.color = color
+        self.orientaion = orientaion
+        
     def draw(self):
-        glPushMatrix()
         r, g, b = self.color
         distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
         if distance < 75:
@@ -127,24 +136,31 @@ class WALL:
             g += 0.05
             b += 0.02
         glColor3f(r, g, b)
+        
+        glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
-        if self.orientaion == 0:
-            glScalef(self.depth, self.width * self.depth, self.height * self.depth)
-        else:
-            glScalef(self.width * self.depth, self.depth, self.height * self.depth)
+        scaleX = self.depth
+        scaleY = self.width
+        if self.orientaion == 1:
+            scaleX, scaleY = scaleY, scaleX
+        glScalef(scaleX, scaleY, self.height)
         glutSolidCube(1)
         glPopMatrix()
-        
+    
+    def update(self):
+        pass
+    
     def collision_detection(self, x, y, radius):
         if self.orientaion == 0:
             min_x = (self.x + self.col_x) - self.depth//2
             max_x = (self.x + self.col_x) + self.depth//2
             
-            min_y = (self.y + self.col_y) - (self.width * self.depth)/2
-            max_y = (self.y + self.col_y) + (self.width * self.depth)/2
+            min_y = (self.y + self.col_y) - self.width//2
+            max_y = (self.y + self.col_y) + self.width//2
+            
         else:
-            min_x = (self.x + self.col_x) - (self.width * self.depth)/2
-            max_x = (self.x + self.col_x) + (self.width * self.depth)/2
+            min_x = (self.x + self.col_x) - self.width//2
+            max_x = (self.x + self.col_x) + self.width//2
             
             min_y = (self.y + self.col_y) - self.depth//2
             max_y = (self.y + self.col_y) + self.depth//2
@@ -154,14 +170,15 @@ class WALL:
                 x - radius < max_x and
                 y + radius > min_y and
                 y - radius < max_y)
-   
-class WALL_VERTICAL(WALL):
-    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1)):
-        super().__init__(x, y, width, height, depth, col_x, col_y, color, 0)
-        
-class WALL_HORIZONTAL(WALL):
-    def __init__(self, x, y, width, height, depth, col_x, col_y, color=(1,1,1)):
-            super().__init__(x, y, width, height, depth, col_x, col_y, color, 1)
+                
+def create_vertical_wall(x, y, z, tile_size, n, height, col_x, col_y, color=(1, 0, 0), orientation=0):
+    walls = []
+    for i in range(n):
+        if orientation == 0:
+            walls.append(UNIT_WALL(x, y + i*tile_size, height*0.5, 50, 10, height, col_x, col_y, color, orientation))
+        else:
+            walls.append(UNIT_WALL(x + i*tile_size, y, height*0.5, 50, 10, height, col_x, col_y, color, orientation))
+    return walls
 
 class ROOM:
     def __init__(self, x, y, width, length, tile_size=50, floor_color=(0.30, 0.25, 0.20)):
@@ -200,8 +217,8 @@ class ROOM:
         return r, g, b
         
     def draw_floor(self):
-        for j in range(-self.length//2, self.length//2 + 1, 1):
-            for i in range(-self.width//2, self.width//2 + 1, 1):
+        for j in range(-self.length//2, self.length//2, 1):
+            for i in range(-self.width//2, self.width//2, 1):
                 rect_x = i*(self.tile_size + 0)
                 rect_y = j*(self.tile_size + 0)
                 
@@ -271,50 +288,76 @@ class ROOM:
                 pass
 
 class STARTROOM(ROOM):
-    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
+    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20), door_at="tblf"):
         super().__init__(x, y, width, length, tile_size, floor_color)
-        self.walls.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        self.walls.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        self.walls.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, 16, 3, 50, self.x, self.y, color=wall_color))
-        self.walls.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width, 3, 50, self.x, self.y, color=wall_color))
         
+        wall_height = 100
+        
+        ts = self.tile_size*0.5
+        # Left
+        LEFT_WALL = create_vertical_wall((self.width-1)*ts, -self.length*ts, 25, self.tile_size, self.length, wall_height, self.x, self.y, wall_color, 0)
+        LEFT_TOP = create_vertical_wall((self.width-1)*ts, -self.length*ts, 25, self.tile_size, int(self.length/2) + (self.length%2), wall_height, self.x, self.y, wall_color, 0)
+        LEFT_BOTTOM = create_vertical_wall((self.width-1)*ts, -self.length*ts + (self.length/2+1)*self.tile_size, 25, self.tile_size, int(self.length/2) + (self.length%2-1), wall_height, self.x, self.y, wall_color, 0)
+        
+        # Right
+        RIGHT_WALL = create_vertical_wall(-self.width*ts-20, -self.length*ts, 25, self.tile_size, self.length, wall_height, self.x, self.y, wall_color, 0)
+        RIGHT_TOP = create_vertical_wall(-self.width*ts-20, -self.length*ts, 25, self.tile_size, int(self.length/2) + (self.length%2), wall_height, self.x, self.y, wall_color, 0)
+        RIGHT_BOTTOM = create_vertical_wall(-self.width*ts-20, -self.length*ts + (self.length/2+1)*self.tile_size, 25, self.tile_size, int(self.length/2) + (self.length%2-1), wall_height, self.x, self.y, wall_color, 0)
+        
+        
+        # Top
+        TOP_WALL = create_vertical_wall(-self.width*ts, -self.length*ts-20, 25, self.tile_size, self.width, wall_height, self.x, self.y, wall_color, 1)
+        TOP_LEFT = create_vertical_wall(-self.width*ts, -self.length*ts-20, 25, self.tile_size, int(self.width/2) + (self.width%2), wall_height, self.x, self.y, wall_color, 1)
+        TOP_RIGHT = create_vertical_wall(-self.width*ts + (self.width/2+1)*self.tile_size, -self.length*ts-20,25,self.tile_size,int(self.width/2) + (self.width%2-1),wall_height,self.x,self.y,wall_color,1)
+        
+        # Bottom
+        BOTTOM_WALL = create_vertical_wall(-self.width*ts, (self.length-1)*ts, 25, self.tile_size, self.width, wall_height, self.x, self.y, wall_color, 1)
+        BOTTOM_LEFT = create_vertical_wall(-self.width*ts, (self.length-1)*ts, 25, self.tile_size, int(self.width/2) + (self.width%2), wall_height, self.x, self.y, wall_color, 1)
+        BOTTOM_RIGHT = create_vertical_wall(-self.width*ts + (self.width/2+1)*self.tile_size, (self.length-1)*ts,25,self.tile_size,int(self.width/2) + (self.width%2-1),wall_height,self.x,self.y,wall_color,1)
+        
+        if "t" in door_at:
+            self.walls.extend(TOP_LEFT)
+            self.walls.extend(TOP_RIGHT)
+        else:
+            self.walls.extend(TOP_WALL)
+            
+        if "b" in door_at:
+            self.walls.extend(BOTTOM_LEFT)
+            self.walls.extend(BOTTOM_RIGHT)
+        else:
+            self.walls.extend(BOTTOM_WALL)
+            
+        if "r" in door_at:
+            self.walls.extend(RIGHT_TOP)
+            self.walls.extend(RIGHT_BOTTOM)
+        else:
+            self.walls.extend(RIGHT_WALL)
+                    
+        if "l" in door_at:
+            self.walls.extend(LEFT_TOP)
+            self.walls.extend(LEFT_BOTTOM)
+        else:
+            self.walls.extend(LEFT_WALL)
+            
 class TUNNEL(ROOM):
     def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.20, 0.23, 0.28), floor_color=(0.30, 0.25, 0.20)):
         super().__init__(x, y, width, length, tile_size, floor_color)
-        # TOP - self.walls.append(WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
-        # BOTTOM - self.walls.append(WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color))
-        # RIGHT - self.walls.append(WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        # LEFT - self.walls.append(WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color))
-        RIGHT = WALL_VERTICAL(self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color)
-        LEFT = WALL_VERTICAL(-self.width//2 * self.tile_size, 0, self.length + 1, 3, 50, self.x, self.y, color=wall_color)
-        TOP = WALL_HORIZONTAL(0, -self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color)
-        BOTTOM = WALL_HORIZONTAL(0, self.length//2 * self.tile_size, self.width + 1, 3, 50, self.x, self.y, color=wall_color)
-        if type == "VERTICAL":
-            self.walls.append(RIGHT)
-            self.walls.append(LEFT)
-        elif type == "HORIZONTAL":
-            self.walls.append(TOP)
-            self.walls.append(BOTTOM)
-        elif type=="TOP_LEFT":
-            self.walls.append(TOP)
-            self.walls.append(RIGHT)
-        elif type=="TOP_RIGHT":
-            self.walls.append(TOP)
-            self.walls.append(LEFT)
-        elif type=="BOTTOM_LEFT":
-            self.walls.append(BOTTOM)
-            self.walls.append(RIGHT)
-        elif type=="BOTTOM_RIGHT":
-            self.walls.append(BOTTOM)
-            self.walls.append(LEFT)
-        elif type=="BOTTOM_LEFT_RIGHT":
-            self.walls.append(BOTTOM)
-            self.walls.append(RIGHT)
-            self.walls.append(LEFT)
-        elif type=="TOP_LEFT_RIGHT":
-            self.walls.append(TOP)
-            self.walls.append(RIGHT)
-            self.walls.append(LEFT)
+        
+        wall_height = 100
+        ts = self.tile_size*0.5
+        LEFT = create_vertical_wall((self.width-1)*ts, -self.length*ts, 25, self.tile_size, self.length, wall_height, self.x, self.y, wall_color, 0)
+        RIGHT = create_vertical_wall(-self.width*ts-20, -self.length*ts, 25, self.tile_size, self.length, wall_height, self.x, self.y, wall_color, 0)
+        TOP = create_vertical_wall(-self.width*ts, -self.length*ts-20, 25, self.tile_size, self.width, wall_height, self.x, self.y, wall_color, 1)
+        BOTTOM = create_vertical_wall(-self.width*ts, (self.length-1)*ts, 25, self.tile_size, self.width, wall_height, self.x, self.y, wall_color, 1)
+        
+        if "t" in type:
+            self.walls.extend(TOP)
+        if "b" in type:
+            self.walls.extend(BOTTOM)
+        if "l" in type:
+            self.walls.extend(LEFT)
+        if "r" in type:
+            self.walls.extend(RIGHT)
 
 class Player:
     x = 0
@@ -354,26 +397,10 @@ class Player:
         self.rooms = []
         self.keys = []
     
-    b = True
-    a = True
-    t = 5
-    t_max = 2
-    
     def draw(self):
         glColor3f(1, 0, 0)
         glTranslatef(self.x, self.y, self.z)
         glRotatef(self.angle, 0, 0, 1)
-        
-        # if self.b:
-        #     if self.a:
-        #         glTranslatef(-1, 0, 0)
-        #     else:
-        #         glTranslatef(1, 0, 0)
-        #     if self.t <= 0:
-        #         self.a = not self.a
-        #         self.t = self.t_max
-        #     self.t -= 1
-        #     self.b = False
         
         glPushMatrix()
         
@@ -550,13 +577,14 @@ class Player:
         
         move_x = True
         move_y = True
+        
         for room in room_list:
-            move_x = (move_x and not room.collision_detection(new_x, self.y, 30))
-            move_y = (move_y and not room.collision_detection(self.x, new_y, 30))
+            move_x = (move_x and not room.collision_detection(new_x, self.y, 15))
+            move_y = (move_y and not room.collision_detection(self.x, new_y, 15))
         
         for item in item_list:
-            move_x = (move_x and not item.collision_detection(new_x, self.y, 30))
-            move_y = (move_y and not item.collision_detection(self.x, new_y, 30))
+            move_x = (move_x and not item.collision_detection(new_x, self.y, 15))
+            move_y = (move_y and not item.collision_detection(self.x, new_y, 15))
         
         if abs(self.x - new_x) > 0.1 or abs(self.y - new_y) > 0.1:
             self.move_leg()
@@ -1021,16 +1049,16 @@ def keyboardListener(key, x, y):
         
         if key == b'u':
             room_to_move.y -= 10
-            debug.text_y += 50
+            # debug.text_y += 50
         if key == b'j':
             room_to_move.y += 10
-            debug.text_y -= 50
+            # debug.text_y -= 50
         if key == b'h':
             room_to_move.x += 10
-            debug.text_x -= 50
+            # debug.text_x -= 50
         if key == b'k':
             room_to_move.x -= 10
-            debug.text_x += 50
+            # debug.text_x += 50
             
         if key == b'z':
             player.armor_on = not player.armor_on
@@ -1040,7 +1068,7 @@ def keyboardListener(key, x, y):
             
         if key == b' ':
             # player.armor_on = not player.armor_on
-            # print(room_to_move.x, room_to_move.y)
+            print(room_to_move.x, room_to_move.y)
             # print(debug.text_x, debug.text_y)
             player.speedZ = 8
             pass
@@ -1064,6 +1092,7 @@ def keyboardUpListener(key, x, y):
         KEY_S = False
 
 def specialKeyListener(key, x, y):
+    # print(key)
     # Move camera up (UP arrow key)
     if key == GLUT_KEY_UP:
         camera.target_up += 5
@@ -1173,54 +1202,44 @@ enemy_list = []
 trap_list = []
 
 room_to_move = None
-
 player = None
 hud = None
 
 def game_init():
     global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list
     
-    room_list = []
-    start_room = STARTROOM(0, 0, 20, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_1 = TUNNEL(350, -500, 6, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_2 = TUNNEL(-350, -500, 6, 10, wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_3 = TUNNEL(-450, -1050, 10, 10, type="TOP_LEFT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_4 = TUNNEL(-750, -1050, 10, 10, type="HORIZONTAL", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_5 = TUNNEL(-1300, -1050, 10, 10, type="TOP_RIGHT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_6 = TUNNEL(-1300, -550, 10, 10, type="BOTTOM_LEFT_RIGHT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-    tunnel_7 = TUNNEL(350, -1035, 6, 10, type="TOP_LEFT_RIGHT", wall_color=WALL_COLOR, floor_color=FLOOR_COLOR)
-
-    room_list.append(start_room)
-    room_list.append(tunnel_1)
-    room_list.append(tunnel_2)
-    room_list.append(tunnel_3)
-    room_list.append(tunnel_4)
-    room_list.append(tunnel_5)
-    room_list.append(tunnel_6)
-    room_list.append(tunnel_7)
-    
     item_list = []
-    door_a = DOOR(439, -245, 50, 75, 100, required_key_name=None)
-    key_a = KEY(-1369, -480, 50, 20, 20, 20, 5, color=(1, 1, 0), name="KEY_A")
-    escape_door = ESCAPE_DOOR(350, -1260, 100, 100, 200, required_key_name="KEY_A")
-    
-    item_list.append(door_a)
-    item_list.append(key_a)
-    item_list.append(escape_door)
-    
     static_item_list = []
-    torch = TORCH(-240, -1250, 50, 20, 100, 20)
-    static_item_list.append(torch)
-    
-    for i in range(9):
-        trap_list.append(SPIKETRAP(-1500 + i * 50, -650, 0, 50, 30))
-        
-    trap_list.append(POISONTRAP(0, -100, 0, 50, 1))
-    
     player = Player(0, 0)
     hud = HUD()
     
-    room_to_move = escape_door
+    room_list = [
+        STARTROOM(0, 0, 10, 10, 50, door_at='t'),
+        TUNNEL(10, -500, 3, 10,type='lr'),
+        TUNNEL(10, -850, 3, 3,type='t'),
+        TUNNEL(310, -850, 8, 3,type='tb'),
+        TUNNEL(-390, -850, 11, 3,type='tb'),
+        TUNNEL(-790, -850, 3, 3,type='tr'),
+        TUNNEL(-790, -600, 3, 6,type='lr'),
+        TUNNEL(-790, -350, 3, 3,type='bl'),
+        TUNNEL(-1040, -350, 5, 3,type='tb'),
+        STARTROOM(-1440, -350, 10, 10, door_at='l'),
+    ]
+    
+    item_list = [
+        KEY(-1440, -350, 0, 20, 20, 20, 20, (1, 0, 0)),
+    ]
+    
+    trap_list = [
+        SPIKETRAP(-740, -710, 0, 50, 30),
+        SPIKETRAP(-790, -710, 0, 50, 30),
+        SPIKETRAP(-840, -710, 0, 50, 30),
+        SPIKETRAP(-890, -710, 0, 50, 30),
+        POISONTRAP(-1440, -350, 0, 50, 2),
+    ]
+    
+    room_to_move = POISONTRAP(-1440, -350, 0, 50, 50)
+    trap_list.append(room_to_move)
 
 game_init()
  
