@@ -1073,17 +1073,54 @@ class ENEMY:
         
         self.init_point = (self.x, self.y)
         
+        self.angle = 0
+        
     def draw(self):
         glPushMatrix()
         
         glTranslatef(self.x, self.y, self.z)
+        # glRotatef(90, 0, 0, 1)
+        glRotatef(self.angle, 0, 0, 1)
         glColor3f(1, 1, 1)
         
+        glPushMatrix()
         glScalef(self.width, self.depth, self.height)
         glutSolidCube(1)
-        
         glPopMatrix()
         
+        glPushMatrix()
+        glColor3f(1, 0, 0)
+        glTranslatef(0, 5, 0)
+        glutSolidCube(5)
+        glPopMatrix()
+        
+        glPopMatrix()
+    
+    def get_enemy_face_direction(self):
+        theta = math.radians(self.angle)
+        fx = -math.cos(theta)
+        fy = -math.sin(theta)
+        return fx, fy
+    
+    def get_player_direction(self):
+        dx = player.x - self.x
+        dy = player.y - self.y
+
+        distance = math.hypot(dx, dy)
+
+        if distance == 0:
+            return 0, 0
+
+        return dx / distance, dy / distance
+    
+    def is_player_in_front(self):
+        fx, fy = self.get_enemy_face_direction()
+        pfx, pfy = self.get_player_direction()
+
+        dot = fx * pfx + fy * pfy
+
+        return abs(1 - dot) < 0.005
+    
     def attack(self):
         if self.attack_cooldown < 0.5:
             player.damage(20)
@@ -1094,7 +1131,34 @@ class ENEMY:
     def collision_detection(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
         if distance < self.radius + 30:
-            self.attack()
+            # self.attack()
+            pass
+        
+    def face_toward_player(self):
+        px = self.init_point[0]
+        py = self.init_point[1]
+        if self.detected_player:
+            px = player.x
+            py = player.y
+        
+        dx = px - self.x
+        dy = py - self.y
+
+        dx *= -1
+
+        target_angle = math.degrees(math.atan2(dx, dy))
+
+        difference = (target_angle - self.angle + 180) % 360 - 180
+
+        if difference > 1:
+            self.angle = (self.angle + 1) % 360
+        elif difference < -1:
+            self.angle = (self.angle - 1) % 360
+        else:
+            self.angle = target_angle
+            return True
+
+        return False
             
     def update(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
@@ -1120,8 +1184,14 @@ class ENEMY:
         new_x = self.x + dx * self.speed * dt
         new_y = self.y + dy * self.speed * dt
         
-        self.x = new_x
-        self.y = new_y
+        
+        distance = math.sqrt((new_x - player.x)**2 + (new_y - player.y)**2)
+        do_move_forward = self.face_toward_player()
+        
+        if distance > 30 and distance > 90 and do_move_forward:
+            self.x = new_x
+            self.y = new_y
+            pass
         
         self.speed *= 0.5
         self.speed += self.accelaration
@@ -1232,16 +1302,20 @@ def keyboardListener(key, x, y):
         
         if key == b'u':
             room_to_move.y -= 10
-            debug.text_y += 10
+            debug.text_y += 1
+            pass
         if key == b'j':
             room_to_move.y += 10
-            debug.text_y -= 10
+            debug.text_y -= 1
+            pass
         if key == b'h':
             room_to_move.x += 10
-            debug.text_x -= 10
+            debug.text_x -= 1
+            pass
         if key == b'k':
             room_to_move.x -= 10
-            debug.text_x += 10
+            debug.text_x += 1
+            pass
             
         if key == b'z':
             player.armor_on = not player.armor_on
@@ -1408,7 +1482,7 @@ hud = None
 def game_init():
     global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list
     
-    player = Player(0, 0)
+    player = Player(100, 0)
     hud = HUD()
     
     room_list = [
