@@ -106,7 +106,7 @@ class CAMERA:
         self.target_z = (player.z - player.height) + player.height * 1
 
 class UNIT_WALL:
-    def __init__(self, x, y, z, width, depth, height, colx, coly, color=(1, 0, 0), orientaion=0):
+    def __init__(self, x, y, z, width, depth, height, colx, coly, color=(1, 0, 0, 1), orientaion=0):
         self.x = x
         self.y = y
         self.z = z
@@ -119,7 +119,7 @@ class UNIT_WALL:
         self.orientaion = orientaion
         
     def draw(self):
-        r, g, b = self.color
+        r, g, b, a = self.color
         distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
         if distance < 75:
             r += 0.15
@@ -135,7 +135,7 @@ class UNIT_WALL:
             r += 0.03
             g += 0.02
             b += 0.01
-        glColor3f(r, g, b)
+        glColor4f(r, g, b, a)
         
         glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
@@ -171,7 +171,7 @@ class UNIT_WALL:
                 y + radius > min_y and
                 y - radius < max_y)
                 
-def create_vertical_wall(x, y, z, tile_size, n, height, col_x, col_y, color=(1, 0, 0), orientation=0):
+def create_vertical_wall(x, y, z, tile_size, n, height, col_x, col_y, color=(1, 0, 0, 1), orientation=0):
     walls = []
     for i in range(n):
         if orientation == 0:
@@ -180,8 +180,8 @@ def create_vertical_wall(x, y, z, tile_size, n, height, col_x, col_y, color=(1, 
             walls.append(UNIT_WALL(x + i*tile_size, y, height*0.5, 50, 10, height, col_x, col_y, color, orientation))
     return walls
 
-class ROOM:
-    def __init__(self, x, y, width, length, tile_size=50, floor_color=(0.30, 0.25, 0.20)):
+class AREA:
+    def __init__(self, x, y, width, length, tile_size=50, floor_color=(0.30, 0.25, 0.20, 1)):
         self.x = x
         self.y = y
         self.z = 0
@@ -197,9 +197,9 @@ class ROOM:
         if self.length % 2 != 0:
             self.length += 1
             
-    def player_light_up(self, rect_x, rect_y):
-        distance = math.sqrt((rect_x + self.x - player.x)**2 + (rect_y + self.y - player.y)**2)
-        r, g, b = self.floor_color
+    def floor_light_up(self, rect_x, rect_y, obj_x, obj_y, color):
+        r, g, b, a = color
+        distance = math.sqrt((rect_x + self.x - obj_x)**2 + (rect_y + self.y - obj_y)**2)
         if distance < 75:
             r += 0.15
             g += 0.10
@@ -214,32 +214,40 @@ class ROOM:
             r += 0.03
             g += 0.02
             b += 0.01
-        return r, g, b
+        return r, g, b, a
+            
+    def player_light_up(self, rect_x, rect_y):
+        distance = math.sqrt((rect_x + self.x - player.x)**2 + (rect_y + self.y - player.y)**2)
+        r, g, b, a = self.floor_color
+        if distance < 75:
+            r += 0.15
+            g += 0.10
+            b += 0.04
+
+        elif distance < 150:
+            r += 0.08
+            g += 0.05
+            b += 0.02
+
+        elif distance < 250:
+            r += 0.03
+            g += 0.02
+            b += 0.01
+        return r, g, b, a
         
     def draw_floor(self):
         for j in range(-self.length//2, self.length//2, 1):
             for i in range(-self.width//2, self.width//2, 1):
                 rect_x = i*(self.tile_size + 0)
                 rect_y = j*(self.tile_size + 0)
+                r, g, b, a = self.floor_color
                 
-                r, g, b = self.player_light_up(rect_x, rect_y)
+                r, g, b, a = self.floor_light_up(rect_x, rect_y, player.x, player.y, (r, g, b, a))
                     
                 for item in static_item_list:
-                    dst = math.sqrt((rect_x + self.x - item.x)**2 + (rect_y + self.y - item.y)**2)
-                    if dst < 50:
-                        r += 0.35
-                        g += 0.25
-                        b += 0.10
-    
-                    elif dst < 100:
-                        r += 0.20
-                        g += 0.13
-                        b += 0.05
-    
-                    elif dst < 150:
-                        r += 0.08
-                        g += 0.05
-                        b += 0.02
+                    if not item.isLightSource:
+                        continue
+                    r, g, b, a = self.floor_light_up(rect_x, rect_y, item.x, item.y, (r, g, b, a))
                         
                 for item in item_list:
                     try:
@@ -249,21 +257,7 @@ class ROOM:
                             continue
                     except:
                         continue
-                    dst = math.sqrt((rect_x + self.x - item.x)**2 + (rect_y + self.y - item.y)**2)
-                    if dst < 50:
-                        r += 0.35
-                        g += 0.25
-                        b += 0.10
-    
-                    elif dst < 80:
-                        r += 0.20
-                        g += 0.13
-                        b += 0.05
-    
-                    elif dst < 120:
-                        r += 0.08
-                        g += 0.05
-                        b += 0.02
+                    r, g, b, a = self.floor_light_up(rect_x, rect_y, item.x, item.y, (r, g, b, a))
                 draw_rect(rect_x, rect_y, self.tile_size, self.tile_size, color=(r, g, b))
         
     def draw(self):
@@ -287,8 +281,8 @@ class ROOM:
             except:
                 pass
 
-class STARTROOM(ROOM):
-    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.08, 0.10, 0.13), floor_color=(0.12, 0.10, 0.08), door_at="tblf", gap_at=""):
+class ROOM(AREA):
+    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.08, 0.10, 0.13, 1), floor_color=(0.12, 0.10, 0.08, 1), door_at="tblf", gap_at=""):
         super().__init__(x, y, width, length, tile_size, floor_color)
         
         wall_height = 100
@@ -339,8 +333,8 @@ class STARTROOM(ROOM):
         elif "l" not in gap_at:
             self.walls.extend(LEFT_WALL)
             
-class TUNNEL(ROOM):
-    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.08, 0.10, 0.13), floor_color=(0.12, 0.10, 0.08)):
+class TUNNEL(AREA):
+    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.08, 0.10, 0.13, 1), floor_color=(0.12, 0.10, 0.08, 1)):
         super().__init__(x, y, width, length, tile_size, floor_color)
         
         wall_height = 100
@@ -366,11 +360,18 @@ class Player:
     shield = 100
     max_shield = 100
     
+    moving = False
+    moved = 0
     speed = 0
-    acc = 3
+    acc = 300
     
-    rot_acc = 5
     angle = 0
+    rotated = 0
+    rotating = False
+    rotation_direction = 0
+    rotation_speed = 2
+    rotation_acc = 10
+    
     
     keys = []
     
@@ -380,7 +381,27 @@ class Player:
     
     armor_on = False
     
+    on_air = False
     speedZ = 0
+    jump_acc = 150
+    
+    attack_on = False
+    
+    def jump(self):
+        if self.on_air:
+            return
+        self.on_air = True
+        self.speedZ = 10
+    
+    def jump_update(self):
+        self.z += self.speedZ
+        self.speedZ -= 0.5
+        if self.z <= self.height // 2:
+            self.z = self.height // 2
+            self.speedZ = 0
+            self.on_air = False
+        if self.on_air:
+            self.move(1)
     
     def __init__(self, x, y):
         self.x = x
@@ -393,7 +414,6 @@ class Player:
         self.keys = []
     
     def draw(self):
-        glColor3f(1, 0, 0)
         glTranslatef(self.x, self.y, self.z)
         glRotatef(self.angle, 0, 0, 1)
         
@@ -401,16 +421,20 @@ class Player:
         
         # Head
         glPushMatrix()
-        glColor3f(0.72, 0.45, 0.25)
+        glColor4f(0.72, 0.45, 0.25, 1)
         glTranslatef(0, 0, self.height//2 - self.height*0.1)
-        glScalef(self.width*0.5, self.width*0.5, 0.2 * self.height)
-        glutSolidCube(1)
+        glScalef(self.width*0.4, self.width*0.4, self.width*0.4)
+        
+        # glutSolidCube(1)
+        gluSphere(gluNewQuadric(), 1, 20, 20)
+        
+        
         glPopMatrix()
         
         if self.armor_on:
             # Halmet
             glPushMatrix()
-            glColor3f(0.10, 0.65, 0.75)
+            glColor4f(0.10, 0.65, 0.75, 1)
             glTranslatef(0, 0, self.height*(0.5-0.05))
             glScalef(self.width*0.6, self.width*0.6, self.height*0.12)
             glutSolidCube(1)
@@ -419,9 +443,9 @@ class Player:
         
         # Body
         glPushMatrix()
-        glColor3f(0.25, 0.35, 0.12)
+        glColor4f(0.25, 0.35, 0.12, 1)
         if self.armor_on:
-            glColor3f(0.08, 0.55, 0.65)
+            glColor4f(0.08, 0.55, 0.65, 1)
         glTranslatef(0, 0, self.height*0.5 - self.height*0.45)
         glScalef(self.width, self.depth, self.height*0.5)
         glutSolidCube(1)
@@ -435,9 +459,9 @@ class Player:
         glTranslatef(0, 0, -(-self.height*0.5 + self.height*0.3))
         # Right Leg
         glPushMatrix()
-        glColor3f(0.20, 0.12, 0.07)
+        glColor4f(0.20, 0.12, 0.07, 1)
         if self.armor_on:
-            glColor3f(0.06, 0.42, 0.50)
+            glColor4f(0.06, 0.42, 0.50, 1)
         glTranslatef(0, 0, -self.height*0.5 + self.height*0.15)
         glTranslatef(-self.width*0.25, 0, 0)
         glScalef(self.width*0.4, self.depth, self.height*0.3)
@@ -446,9 +470,9 @@ class Player:
         
         # Right Boot
         glPushMatrix()
-        glColor3f(0.12, 0.07, 0.04)
+        glColor4f(0.12, 0.07, 0.04, 1)
         if self.armor_on:
-            glColor3f(0.05, 0.35, 0.42)
+            glColor4f(0.05, 0.35, 0.42, 1)
         glTranslatef(0, 0, -self.height*0.5 + self.height*0.05)
         glTranslatef(-self.width*0.25, 0, 0)
         glScalef(self.width//2, self.depth+1, self.height*0.1)
@@ -464,9 +488,9 @@ class Player:
         # Left Leg - upper
         glTranslatef(0, 0, -(-self.height*0.5 + self.height*0.3))
         glPushMatrix()
-        glColor3f(0.20, 0.12, 0.07)
+        glColor4f(0.20, 0.12, 0.07, 1)
         if self.armor_on:
-            glColor3f(0.06, 0.42, 0.50)
+            glColor4f(0.06, 0.42, 0.50, 1)
         glTranslatef(0, 0, -self.height*0.5 + self.height*0.15)
         glTranslatef(self.width*0.25, 0, 0)
         glScalef(self.width*0.4, self.depth, self.height*0.3)
@@ -476,9 +500,9 @@ class Player:
         
         # Left Boot
         glPushMatrix()
-        glColor3f(0.12, 0.07, 0.04)
+        glColor4f(0.12, 0.07, 0.04, 1)
         if self.armor_on:
-            glColor3f(0.05, 0.35, 0.42)
+            glColor4f(0.05, 0.35, 0.42, 1)
         glTranslatef(0, 0, -self.height*0.5 + self.height*0.05)
         glTranslatef(self.width*0.25, 0, 0)
         glScalef(self.width//2, self.depth+1, self.height*0.1)
@@ -495,7 +519,7 @@ class Player:
         
         # Left Arm
         glPushMatrix()
-        glColor3f(0.72, 0.45, 0.25)
+        glColor4f(0.72, 0.45, 0.25, 1)
         glTranslatef(self.width*0.6, 0, self.height*0.1)
         glScalef(self.width*0.2, self.depth, self.height*0.4)
         glutSolidCube(1)
@@ -503,9 +527,9 @@ class Player:
         
         # Left Shoulder
         glPushMatrix()
-        glColor3f(0.25, 0.35, 0.12)
+        glColor4f(0.25, 0.35, 0.12, 1)
         if self.armor_on:
-            glColor3f(0.07, 0.45, 0.52)
+            glColor4f(0.07, 0.45, 0.52, 1)
         glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
         glScalef(self.width*0.2+1, self.depth+1, self.height*0.2+1)
         glutSolidCube(1)
@@ -520,7 +544,7 @@ class Player:
         
         # Right Arm
         glPushMatrix()
-        glColor3f(0.72, 0.45, 0.25)
+        glColor4f(0.72, 0.45, 0.25, 1)
         glTranslatef(-self.width*0.6, 0, self.height*0.1)
         glScalef(self.width*0.2, self.depth, self.height*0.4)
         glutSolidCube(1)
@@ -528,9 +552,9 @@ class Player:
         
         # Right Shoulder
         glPushMatrix()
-        glColor3f(0.25, 0.35, 0.12)
+        glColor4f(0.25, 0.35, 0.12, 1)
         if self.armor_on:
-            glColor3f(0.07, 0.45, 0.52)
+            glColor4f(0.07, 0.45, 0.52, 1)
         glTranslatef(-self.width*0.6, 0, self.height*0.3 - self.height*0.1)
         glScalef(self.width*0.2+1, self.depth+1, self.height*0.2+1)
         glutSolidCube(1)
@@ -541,6 +565,7 @@ class Player:
         
     def move_leg(self):
         self.leg_angle += 1 * self.leg_angle_dir
+        
         if self.leg_angle > self.leg_angle_limit:
             self.leg_angle = self.leg_angle_limit
             self.leg_angle_dir *= -1
@@ -551,17 +576,40 @@ class Player:
     def damage(self, point):
         self.b = True
         if self.armor_on:
-            self.shield -= point*1.5
+            new_sheild = self.shield - point*1.5
+            if new_sheild > 0:
+                self.shield = new_sheild
+            else:
+                self.shield = 0
             if self.shield <= 0:
                 self.armor_on = False
         else:
-            self.health -= point
-      
+            new_health = self.health - point
+            if new_health > 0:
+                self.health = new_health
+            else:
+                self.health = 0
+
+    def move(self, direction):
+        acc = self.acc
+        if self.on_air:
+            acc = self.jump_acc
+        self.speed += acc * dt * direction
+    
+    def rotate(self, direction):
+        player.rotation_direction = direction
+        player.rotating = True  
+
+    def attack(self):
+        pass
+    
     def update(self):
-        if KEY_W:
-            self.speed += 3
-        if KEY_S:
-            self.speed -= 3
+        if self.rotating:
+            self.angle += self.rotation_speed * self.rotation_direction
+            self.rotated += 1
+            if self.rotated >= self.rotation_acc:
+                self.rotated = 0
+                self.rotating = False
         
         theta = math.radians(self.angle)
         dx = math.sin(theta) * self.speed
@@ -594,12 +642,7 @@ class Player:
             
         self.speed *= 0.5
         
-        self.z += self.speedZ
-        self.speedZ -= 0.5
-
-        if self.z <= self.height // 2:
-            self.z = self.height // 2
-            self.speedZ = 0
+        self.jump_update()
 
 class STATIC_OBJECT:
     def __init__(self, x, y, z, width, height, depth, isLightSource=False):
@@ -626,17 +669,78 @@ class TORCH(STATIC_OBJECT):
         
         glTranslatef(self.x, self.y, self.z)
         
-        glColor3f(0.25, 0.10, 0.03)
+        glColor4f(0.25, 0.10, 0.03, 1)
         glTranslatef(0, 0, -0.1*self.height)
         glScale(self.width, self.depth, 0.8*self.height)
         glutSolidCube(1)
         glScale(1/self.width, 1/self.depth, 1/(0.8*self.height))
         
-        glColor3f(1, 1, 0)
+        glColor4f(1, 1, 0, 1)
         glTranslatef(0, 0, 0.5*self.height)
         glScale(self.width, self.depth, 0.2*self.height)
         glutSolidCube(1)
         
+        glPopMatrix()
+
+class SKULL(STATIC_OBJECT):
+    def __init__(self, x, y, z, width, height, depth, angle, isLightSource=False):
+        super().__init__(x, y, z, width, height, depth, isLightSource)
+        self.angle = angle
+        
+    def draw(self):
+        glPushMatrix()
+        
+        glTranslatef(self.x, self.y, self.z)
+        glRotatef(self.angle, 0, 0, 1)
+        glScalef(0.5, 0.5, 0.5)
+        glScalef(self.width, self.depth, self.height)
+        
+        # Skull
+        glColor3f(0.75, 0.72, 0.62)
+
+        # Head
+        glPushMatrix()
+        glScalef(1.0, 0.85, 1.0)
+        glutSolidSphere(20, 12, 8)
+        glPopMatrix()
+
+        # Jaw
+        glPushMatrix()
+        glTranslatef(0, 2, -15)
+        glScalef(0.65, 0.55, 0.45)
+        glutSolidCube(20)
+        glPopMatrix()
+
+        # Eye sockets
+        glColor3f(0.02, 0.02, 0.02)
+
+        glPushMatrix()
+        glTranslatef(-8, -17, 5)
+        glutSolidSphere(5, 8, 6)
+        glPopMatrix()
+
+        glPushMatrix()
+        glTranslatef(8, -17, 5)
+        glutSolidSphere(5, 8, 6)
+        glPopMatrix()
+
+        # Nose
+        glPushMatrix()
+        glTranslatef(0, -18, -3)
+        glScalef(0.5, 0.4, 0.8)
+        glutSolidCone(5, 8, 6, 1)
+        glPopMatrix()
+
+        # Teeth
+        glColor3f(0.85, 0.82, 0.72)
+
+        for x in [-7, -3.5, 0, 3.5, 7]:
+            glPushMatrix()
+            glTranslatef(x, -18, -14)
+            glScalef(0.25, 0.3, 0.5)
+            glutSolidCube(8)
+            glPopMatrix()
+
         glPopMatrix()
 
 class DOOR:
@@ -664,12 +768,12 @@ class DOOR:
         glRotate(self.angle, 0, 0, -1)
         glTranslatef(self.width/2, 0, 0)
         door_color = (0.22, 0.09, 0.025)
-        glColor3f(0.18, 0.17, 0.15)
+        glColor4f(0.18, 0.17, 0.15, 1)
         glScalef(self.width, 5, self.height)
         glutSolidCube(1)
         glScalef(1/self.width, 1/5, 1/self.height)
         glTranslatef(self.width/2 - 6, 0, 0)
-        glColor3f(1, 1, 0)
+        glColor4f(1, 1, 0, 1)
         glutSolidCube(6)
         glPopMatrix()
         
@@ -678,7 +782,7 @@ class DOOR:
             if self.locked:
                 draw_text(0, -WINDOW_SIZE[1]//2 + 50, "[LOCKED]")
             elif self.closed:
-                draw_text(0, -WINDOW_SIZE[1]//2 + 50, "Press \'Space\'")
+                draw_text(0, -WINDOW_SIZE[1]//2 + 50, "Press \'f\'")
     
     def update(self):
         if self.closed:
@@ -689,7 +793,7 @@ class DOOR:
                 self.angle += 5
         
     def keyboard_listener(self, key):
-        if key == b' ' and self.closed:
+        if key == b'f' and self.closed:
             distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
             if distance < self.width:
                 if not self.locked:
@@ -763,7 +867,7 @@ class KEY(ITEM):
         glTranslatef(self.x, self.y, 30)
         glRotatef(self.rotation, 0, 0, 1)
         
-        glColor(r, g, b)
+        glColor4f(r, g, b, 1)
         glScalef(40, 3, 3)
         glutSolidCube(1)
         glScalef(1/40, 1/3, 1/3)
@@ -837,6 +941,10 @@ class HUD:
         draw_text(-350, 180, "Shield")
         bar_color = (0.10, 0.65, 0.75)
         draw_rect(-275 - (150 - (150 * (player.shield/100)))//2, 185, 150 * (player.shield/100), 20, bar_color)
+        
+    def draw_fps(self):
+        fps = math.ceil(1/dt)
+        draw_text(280, 240, f"FPS: {fps}")
     
     def draw(self):
         glMatrixMode(GL_PROJECTION)
@@ -850,6 +958,7 @@ class HUD:
         self.draw_key_hud()
         self.draw_player_health()
         self.draw_player_shield()
+        self.draw_fps()
             
             
         # Restore original projection and modelview matrices
@@ -872,13 +981,13 @@ class SPIKETRAP:
             
     def draw(self):
         glPushMatrix()
-        glColor3f(0.18, 0.16, 0.14)
+        glColor4f(0.18, 0.16, 0.14, 1)
         glTranslatef(self.x, self.y, self.z)
         glScalef(self.width, self.width, 1)
         glutSolidCube(1)
         glScalef(1/self.width, 1/self.width, 1)
         
-        glColor3f(0.32, 0.35, 0.38)
+        glColor4f(0.32, 0.35, 0.38, 1)
         glTranslatef(self.width/2 - 6, -self.width//2 + 8, 0)
         for j in range(4):
             for i in range(4):
@@ -888,7 +997,7 @@ class SPIKETRAP:
             
         glTranslatef(0, -self.width, 18)
         
-        glColor3f(0.55, 0.58, 0.62)
+        glColor4f(0.55, 0.58, 0.62, 1)
         for j in range(4):
             for i in range(4):
                 gluCylinder(gluNewQuadric(), self.width/20, 0, 12, 10, 10)
@@ -914,13 +1023,13 @@ class POISONTRAP:
             
     def draw(self):
         glPushMatrix()
-        glColor3f(0.45, 0.10, 0.55)
+        glColor4f(0.45, 0.10, 0.55, 1)
         glTranslatef(self.x, self.y, self.z)
         glScalef(self.width, self.width, 1)
         glutSolidCube(1)
         glScalef(1/self.width, 1/self.width, 1)
         
-        glColor3f(0.40, 0.75, 0.05)
+        glColor4f(0.40, 0.75, 0.05, 1)
         glTranslatef(self.width/2 - 6, -self.width//2 + 8, 0)
         for j in range(4):
             for i in range(4):
@@ -953,7 +1062,7 @@ def convert_coordinate(x, y):
 
 def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18, color=(1,1,1)):
     r, g, b = color
-    glColor3f(r, g, b)
+    glColor4f(r, g, b, 1)
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
@@ -980,7 +1089,7 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18, color=(1,1,1)):
 
 def draw_point(size, x, y, z, color=(1,1,1,1)):
     r, g, b, a = color
-    glColor4f(r, g, b, a)
+    glColor4f(r, g, b, 1)
     glPointSize(size)
     glBegin(GL_POINTS)
     glVertex3f(x, y, z)
@@ -1002,16 +1111,16 @@ def draw_rect(x, y, width, height, color=(1,1,1), color1=None, color2=None,color
     r3, g3, b3 = color3
     glBegin(GL_QUADS)
     
-    glColor3f(r, g, b)
+    glColor4f(r, g, b, 1)
     glVertex3f(x+width//2, y-height//2, 0)
     
-    glColor3f(r1, g1, b1)
+    glColor4f(r1, g1, b1, 1)
     glVertex3f(x-width//2, y-height//2, 0)
     
-    glColor3f(r2, g2, b2)
+    glColor4f(r2, g2, b2, 1)
     glVertex3f(x-width//2, y+height//2, 0)
     
-    glColor3f(r3, g3, b3)
+    glColor4f(r3, g3, b3, 1)
     glVertex3f(x+width//2, y+height//2, 0)
     glEnd()
 
@@ -1032,28 +1141,26 @@ def keyboardListener(key, x, y):
     global FIRST_PERSON, KEY_W, KEY_S, text_x, text_y, GAME_STATE
     if GAME_STATE == "GAME":
         if key == b'w':
-            # player.speed += 10
-            KEY_W = True
+            player.move(1)
         if key == b's':
-            # player.speed -= 10
-            KEY_S = True
+            player.move(-1)
         if key == b'a':
-            player.angle += 20
+            player.rotate(1)
         if key == b'd':
-            player.angle -= 20
+            player.rotate(-1)
         
         if key == b'u':
             room_to_move.y -= 10
-            # debug.text_y += 50
+            debug.text_y += 10
         if key == b'j':
             room_to_move.y += 10
-            # debug.text_y -= 50
+            debug.text_y -= 10
         if key == b'h':
             room_to_move.x += 10
-            # debug.text_x -= 50
+            debug.text_x -= 10
         if key == b'k':
             room_to_move.x -= 10
-            # debug.text_x += 50
+            debug.text_x += 10
             
         if key == b'z':
             player.armor_on = not player.armor_on
@@ -1062,10 +1169,9 @@ def keyboardListener(key, x, y):
             FIRST_PERSON = not FIRST_PERSON
             
         if key == b' ':
-            # player.armor_on = not player.armor_on
             print(room_to_move.x, room_to_move.y)
             # print(debug.text_x, debug.text_y)
-            player.speedZ = 8
+            player.jump()
             pass
             
         for room in room_list:
@@ -1124,19 +1230,34 @@ def mouseListener(button, state, x, y):
         if button == GLUT_LEFT_BUTTON and state == GLUT_UP:
             main_menu_button.click(x, y, main_menu_button_callback)
 
+import time
+last_time = time.time()
+FPS = 60
+target_time = 1/FPS
+dt = 1
+
 def idle(value=0):
+    global last_time, dt
+    
+    current_time = time.time()
+    dt = current_time - last_time
+    if dt < 1/FPS:
+        return
+    dt = target_time
+    last_time = current_time
     
     if GAME_STATE == 'GAME':
         player.update()
         camera.update()
         hud.update()
+        
         for item in item_list:
             item.update()
+            
         for trap in trap_list:
             trap.update()
         
     glutPostRedisplay()
-    glutTimerFunc(1000//FPS, idle, 0)
 
 def setupCamera():
     """
@@ -1203,13 +1324,11 @@ hud = None
 def game_init():
     global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list
     
-    item_list = []
-    static_item_list = []
     player = Player(0, 0)
     hud = HUD()
     
     room_list = [
-        STARTROOM(0, 0, 10, 10, 50, door_at='t'),
+        ROOM(0, 0, 10, 10, 50, door_at='t'),
         TUNNEL(10, -500, 3, 10,type='lr'),
         TUNNEL(10, -850, 3, 3,type='t'),
         TUNNEL(310, -850, 8, 3,type='tb'),
@@ -1218,9 +1337,9 @@ def game_init():
         TUNNEL(-790, -600, 3, 6,type='lr'),
         TUNNEL(-790, -350, 3, 3,type='bl'),
         TUNNEL(-1040, -350, 5, 3,type='tb'),
-        STARTROOM(-1440, -350, 10, 10, door_at='l'),
+        ROOM(-1440, -350, 10, 10, door_at='l'),
         TUNNEL(610, -850, 3, 3,type='lb'),
-        STARTROOM(610, -1100, 3, 6, door_at='t', gap_at='b'),
+        ROOM(610, -1100, 3, 6, door_at='t', gap_at='b'),
     ]
     
     item_list = [
@@ -1236,13 +1355,19 @@ def game_init():
         POISONTRAP(-1440, -350, 0, 50, 2),
     ]
     
-    room_to_move = STARTROOM(610, -1400, 6, 6, door_at='b', gap_at='')
-    room_list.append(room_to_move)
+    static_item_list = [
+        SKULL(-900, -960, 10, 1, 1, 1, 90 + 45, False),
+        TORCH(-1690, -140, 25, 10, 50, 10),
+        TORCH(-1690, -610, 25, 10, 50, 10)
+    ]
+    
+    room_to_move = TORCH(-1690, -610, 25, 10, 50, 10)
+    static_item_list.append(room_to_move)
 
 game_init()
  
 def draw_menu():
-    glColor3f(1, 0, 0)
+    glColor4f(1, 0, 0, 1)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
     draw_text(-12*5, 200, "3D Dungeon Escape", font=GLUT_BITMAP_TIMES_ROMAN_24)
@@ -1252,11 +1377,64 @@ def draw_menu():
     exit_button.draw()
 
 def draw_help():
-    glColor3f(1, 0, 0)
+    glColor4f(1, 0, 0, 1)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
     draw_text(0, WINDOW_SIZE[1]//2 - 100, "HELP", font=GLUT_BITMAP_TIMES_ROMAN_24)
     help_back_button.draw()
+
+def draw_skull():
+    
+    glPushMatrix()
+    glTranslatef(0, 0, 100)
+
+    # Skull
+    glColor3f(0.75, 0.72, 0.62)
+
+    # Head
+    glPushMatrix()
+    glScalef(1.0, 0.85, 1.0)
+    glutSolidSphere(20, 12, 8)
+    glPopMatrix()
+
+    # Jaw
+    glPushMatrix()
+    glTranslatef(0, 2, -15)
+    glScalef(0.65, 0.55, 0.45)
+    glutSolidCube(20)
+    glPopMatrix()
+
+    # Eye sockets
+    glColor3f(0.02, 0.02, 0.02)
+
+    glPushMatrix()
+    glTranslatef(-8, -17, 5)
+    glutSolidSphere(5, 8, 6)
+    glPopMatrix()
+
+    glPushMatrix()
+    glTranslatef(8, -17, 5)
+    glutSolidSphere(5, 8, 6)
+    glPopMatrix()
+
+    # Nose
+    glPushMatrix()
+    glTranslatef(0, -18, -3)
+    glScalef(0.5, 0.4, 0.8)
+    glutSolidCone(5, 8, 6, 1)
+    glPopMatrix()
+
+    # Teeth
+    glColor3f(0.85, 0.82, 0.72)
+
+    for x in [-7, -3.5, 0, 3.5, 7]:
+        glPushMatrix()
+        glTranslatef(x, -18, -14)
+        glScalef(0.25, 0.3, 0.5)
+        glutSolidCube(8)
+        glPopMatrix()
+
+    glPopMatrix()
 
 def draw_game():
     for room in room_list:
@@ -1271,11 +1449,14 @@ def draw_game():
     for trap in trap_list:
         trap.draw()
         
+    # draw_skull()
     player.draw()
     hud.draw()
+    
+    
 
 def draw_escaped():
-    glColor3f(1, 0, 0)
+    glColor4f(1, 0, 0, 1)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
     end_quote = "A NEW LIFE BEGINS"
@@ -1321,17 +1502,16 @@ def main():
     glutInitWindowPosition(0, 0)  # Window position
     wind = glutCreateWindow(WINDOW_TITLE)  # Create the window
 
-    # glEnable(GL_BLEND)
-    # glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     
-    glutDisplayFunc(showScreen)  # Register display function
-    glutKeyboardFunc(keyboardListener)  # Register keyboard listener
-    glutKeyboardUpFunc(keyboardUpListener)
+    glutDisplayFunc(showScreen)
+    glutKeyboardFunc(keyboardListener)
     glutSpecialFunc(specialKeyListener)
     glutMouseFunc(mouseListener)
-    glutTimerFunc(1000//FPS, idle, 0)
+    glutIdleFunc(idle, 0)
 
-    glutMainLoop()  # Enter the GLUT main loop
+    glutMainLoop()
 
 if __name__ == "__main__":
     main()
