@@ -25,14 +25,6 @@ FIRST_PERSON = True
 #   - ESCAPED
 GAME_STATE = "GAME"
 
-FLOOR_COLOR = (0.30, 0.25, 0.20)
-WALL_COLOR = (0.20, 0.23, 0.28)
-
-KEY_W = False
-KEY_A = False
-KEY_S = False
-KEY_D = False
-
 # classes
 class BUTTON:
     def __init__(self,x,y,width,height,color=(1,1,1),text="Button"):
@@ -84,6 +76,16 @@ class CAMERA:
             self.target_z = 0
             return
         
+        if False:
+            self.camera_x = player.x + fx * 10
+            self.camera_y = player.y - fy * -20
+            self.camera_z = (player.z - player.height//2) + player.height
+            
+            self.target_x = player.x + fx * self.distance
+            self.target_y = player.y + fy * self.distance
+            self.target_z = (player.z - player.height) + player.height * 1.5
+            return
+        
         if not FIRST_PERSON:
             self.camera_x = player.x - fx * self.distance
             self.camera_y = player.y - fy * self.distance
@@ -104,6 +106,8 @@ class CAMERA:
         self.target_x = player.x + fx * self.distance
         self.target_y = player.y + fy * self.distance
         self.target_z = (player.z - player.height) + player.height * 1
+
+
 
 class UNIT_WALL:
     def __init__(self, x, y, z, width, depth, height, colx, coly, color=(1, 0, 0, 1), orientaion=0):
@@ -353,6 +357,8 @@ class TUNNEL(AREA):
         if "r" in type:
             self.walls.extend(RIGHT)
 
+
+
 class Player:
     health = 100
     max_health = 100
@@ -369,8 +375,8 @@ class Player:
     rotated = 0
     rotating = False
     rotation_direction = 0
-    rotation_speed = 2
-    rotation_acc = 10
+    rotation_speed = 10
+    rotation_acc = 1
     
     
     keys = []
@@ -387,12 +393,22 @@ class Player:
     
     attack_on = False
     
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        
+        self.width = 30
+        self.depth = 10
+        self.height = 80
+        self.z = self.height//2
+        self.keys = []
+        
     def jump(self):
-        if self.on_air:
-            return
-        self.on_air = True
-        self.speedZ = 10
-    
+            if self.on_air:
+                return
+            self.on_air = True
+            self.speedZ = 10
+        
     def jump_update(self):
         self.z += self.speedZ
         self.speedZ -= 0.5
@@ -403,42 +419,29 @@ class Player:
         if self.on_air:
             self.move(1)
     
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        
-        self.width = 30
-        self.depth = 10
-        self.height = 80
-        self.z = self.height//2
-        self.keys = []
-    
     def draw(self):
         glTranslatef(self.x, self.y, self.z)
         glRotatef(self.angle, 0, 0, 1)
         
         glPushMatrix()
         
+        
+        # if self.armor_on:
+        #     # Halmet
+        #     glPushMatrix()
+        #     glColor4f(0.10, 0.65, 0.75, 1)
+        #     glTranslatef(0, 0, self.height//2 - debug.text_y)
+        #     glScalef(self.width*0.4, self.width*0.4, self.width*0.4)
+        #     gluSphere(gluNewQuadric(), 1, 20, 20)
+        #     glPopMatrix()
+        
         # Head
         glPushMatrix()
         glColor4f(0.72, 0.45, 0.25, 1)
         glTranslatef(0, 0, self.height//2 - self.height*0.1)
         glScalef(self.width*0.4, self.width*0.4, self.width*0.4)
-        
-        # glutSolidCube(1)
         gluSphere(gluNewQuadric(), 1, 20, 20)
-        
-        
         glPopMatrix()
-        
-        if self.armor_on:
-            # Halmet
-            glPushMatrix()
-            glColor4f(0.10, 0.65, 0.75, 1)
-            glTranslatef(0, 0, self.height*(0.5-0.05))
-            glScalef(self.width*0.6, self.width*0.6, self.height*0.12)
-            glutSolidCube(1)
-            glPopMatrix()
         
         
         # Body
@@ -644,6 +647,65 @@ class Player:
         
         self.jump_update()
 
+class HUD:
+    def __init__(self):
+        pass
+    
+    def draw_key_hud(self):
+        draw_text(-WINDOW_SIZE[0]//2 + 10, WINDOW_SIZE[1]//2 - 100 - 20, "KEYS: ")
+        for i in range(len(player.keys)):
+            x = -WINDOW_SIZE[0]//2 + 90 + i*45
+            y = WINDOW_SIZE[1]//2 - 92 - 20
+            draw_rect(x, y, 30, 5, color=player.keys[i][1])
+            draw_rect(x-12.5, y-5, 5, 10, color=player.keys[i][1])
+            draw_rect(x-5, y-5, 5, 10, color=player.keys[i][1])
+            draw_rect(x + 15, y, 10, 10, color=player.keys[i][1])
+            
+    def draw_player_health(self):
+        draw_text(-350, 205, f"Player {int(player.health)}/100")
+        bar_color = (0, 1, 0)
+        if player.health < 20:
+            bar_color = (1, 0, 0)
+        elif player.health < 50:
+            bar_color = (1, 1, 0)
+        draw_rect(-275 - (150 - (150 * (player.health/100)))//2, 210, 150 * (player.health/100), 20, bar_color)
+        
+    def draw_player_shield(self):
+        if not player.armor_on:
+            return
+        draw_text(-350, 180, "Shield")
+        bar_color = (0.10, 0.65, 0.75)
+        draw_rect(-275 - (150 - (150 * (player.shield/100)))//2, 185, 150 * (player.shield/100), 20, bar_color)
+        
+    def draw_fps(self):
+        fps = math.ceil(1/dt)
+        draw_text(280, 240, f"FPS: {fps}")
+    
+    def draw(self):
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        
+        self.draw_key_hud()
+        self.draw_player_health()
+        self.draw_player_shield()
+        self.draw_fps()
+            
+            
+        # Restore original projection and modelview matrices
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+    
+    def update(self):
+        pass
+
+
 class STATIC_OBJECT:
     def __init__(self, x, y, z, width, height, depth, isLightSource=False):
         self.x = x
@@ -787,10 +849,10 @@ class DOOR:
     def update(self):
         if self.closed:
             if self.angle > 0:
-                self.angle -= 5
+                self.angle -= 100 * dt
         else:
             if self.angle < 90:
-                self.angle += 5
+                self.angle += 100 * dt
         
     def keyboard_listener(self, key):
         if key == b'f' and self.closed:
@@ -834,6 +896,8 @@ class ESCAPE_DOOR(DOOR):
                 GAME_STATE = 'ESCAPED'
                 self.over = False
 
+
+# INTERACTIVE ITEMS
 class ITEM:
     def __init__(self, x, y, z, width, height, depth, radius, color, visible=True, active=True, callback=None, rotation=0, isLightSource=False):
         self.x = x
@@ -912,64 +976,8 @@ class KEY(ITEM):
         self.active = False
         player.keys.append((self.name, self.color))
 
-class HUD:
-    def __init__(self):
-        pass
-    
-    def draw_key_hud(self):
-        draw_text(-WINDOW_SIZE[0]//2 + 10, WINDOW_SIZE[1]//2 - 100 - 20, "KEYS: ")
-        for i in range(len(player.keys)):
-            x = -WINDOW_SIZE[0]//2 + 90 + i*45
-            y = WINDOW_SIZE[1]//2 - 92 - 20
-            draw_rect(x, y, 30, 5, color=player.keys[i][1])
-            draw_rect(x-12.5, y-5, 5, 10, color=player.keys[i][1])
-            draw_rect(x-5, y-5, 5, 10, color=player.keys[i][1])
-            draw_rect(x + 15, y, 10, 10, color=player.keys[i][1])
-            
-    def draw_player_health(self):
-        draw_text(-350, 205, f"Player {int(player.health)}/100")
-        bar_color = (0, 1, 0)
-        if player.health < 20:
-            bar_color = (1, 0, 0)
-        elif player.health < 50:
-            bar_color = (1, 1, 0)
-        draw_rect(-275 - (150 - (150 * (player.health/100)))//2, 210, 150 * (player.health/100), 20, bar_color)
-        
-    def draw_player_shield(self):
-        if not player.armor_on:
-            return
-        draw_text(-350, 180, "Shield")
-        bar_color = (0.10, 0.65, 0.75)
-        draw_rect(-275 - (150 - (150 * (player.shield/100)))//2, 185, 150 * (player.shield/100), 20, bar_color)
-        
-    def draw_fps(self):
-        fps = math.ceil(1/dt)
-        draw_text(280, 240, f"FPS: {fps}")
-    
-    def draw(self):
-        glMatrixMode(GL_PROJECTION)
-        glPushMatrix()
-        glLoadIdentity()
-        gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
-        glMatrixMode(GL_MODELVIEW)
-        glPushMatrix()
-        glLoadIdentity()
-        
-        self.draw_key_hud()
-        self.draw_player_health()
-        self.draw_player_shield()
-        self.draw_fps()
-            
-            
-        # Restore original projection and modelview matrices
-        glPopMatrix()
-        glMatrixMode(GL_PROJECTION)
-        glPopMatrix()
-        glMatrixMode(GL_MODELVIEW)
-    
-    def update(self):
-        pass
 
+# TRAPS
 class SPIKETRAP:
     def __init__(self, x, y, z, width, height):
         self.x = x
@@ -1045,6 +1053,79 @@ class POISONTRAP:
             player.damage(self.damage)
             # player.speed -= 20
 
+
+class ENEMY:
+    def __init__(self, x, y, z, width, depth, height, radius=30):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.width = width
+        self.depth = depth
+        self.height = height
+        self.radius = radius
+        
+        self.speed = 0
+        self.accelaration = 30
+        
+        self.attack_cooldown = 0
+        
+        self.detected_player = False
+        
+        self.init_point = (self.x, self.y)
+        
+    def draw(self):
+        glPushMatrix()
+        
+        glTranslatef(self.x, self.y, self.z)
+        glColor3f(1, 1, 1)
+        
+        glScalef(self.width, self.depth, self.height)
+        glutSolidCube(1)
+        
+        glPopMatrix()
+        
+    def attack(self):
+        if self.attack_cooldown < 0.5:
+            player.damage(20)
+            player.speed -= 10
+            self.attack_cooldown = 100
+        self.attack_cooldown -= 1
+        
+    def collision_detection(self):
+        distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+        if distance < self.radius + 30:
+            self.attack()
+            
+    def update(self):
+        distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+        
+        if distance < 400:
+            self.detected_player = True
+        else:
+            self.detected_player = False
+        
+        if self.detected_player:
+            dx = player.x - self.x
+            dy = player.y - self.y
+            self.collision_detection()
+        else:
+            dx = self.init_point[0] - self.x
+            dy = self.init_point[1] - self.y
+            
+        if dx != 0:
+            dx = dx/abs(dx)
+        if dy != 0:
+            dy = dy/abs(dy)
+        
+        new_x = self.x + dx * self.speed * dt
+        new_y = self.y + dy * self.speed * dt
+        
+        self.x = new_x
+        self.y = new_y
+        
+        self.speed *= 0.5
+        self.speed += self.accelaration
+    
 # glutSolidCube(30)
 # gluSphere(gluNewQuadric(), 20, 10, 10)
 # gluCylinder(gluNewQuadric(), 8, 3, 30, 10, 10)
@@ -1169,8 +1250,8 @@ def keyboardListener(key, x, y):
             FIRST_PERSON = not FIRST_PERSON
             
         if key == b' ':
-            print(room_to_move.x, room_to_move.y)
-            # print(debug.text_x, debug.text_y)
+            # print(room_to_move.x, room_to_move.y)
+            print(debug.text_x, debug.text_y)
             player.jump()
             pass
             
@@ -1256,6 +1337,9 @@ def idle(value=0):
             
         for trap in trap_list:
             trap.update()
+            
+        for enemy in enemy_list:
+            enemy.update()
         
     glutPostRedisplay()
 
@@ -1344,7 +1428,8 @@ def game_init():
     
     item_list = [
         KEY(-1440, -350, 0, 20, 20, 20, 20, (1, 0, 0), name="0x0001"),
-        DOOR(610, -1270, 50, 50, 100, required_key_name="0x0001"),
+        ESCAPE_DOOR(610, -1270, 50, 50, 100, required_key_name="0x0001"),
+        # DOOR(0, -100, 50, 50, 100),
     ]
     
     trap_list = [
@@ -1359,6 +1444,10 @@ def game_init():
         SKULL(-900, -960, 10, 1, 1, 1, 90 + 45, False),
         TORCH(-1690, -140, 25, 10, 50, 10),
         TORCH(-1690, -610, 25, 10, 50, 10)
+    ]
+    
+    enemy_list = [
+        ENEMY(0, -100, 25, 30, 10, 80)
     ]
     
     room_to_move = TORCH(-1690, -610, 25, 10, 50, 10)
@@ -1383,77 +1472,31 @@ def draw_help():
     draw_text(0, WINDOW_SIZE[1]//2 - 100, "HELP", font=GLUT_BITMAP_TIMES_ROMAN_24)
     help_back_button.draw()
 
-def draw_skull():
-    
-    glPushMatrix()
-    glTranslatef(0, 0, 100)
-
-    # Skull
-    glColor3f(0.75, 0.72, 0.62)
-
-    # Head
-    glPushMatrix()
-    glScalef(1.0, 0.85, 1.0)
-    glutSolidSphere(20, 12, 8)
-    glPopMatrix()
-
-    # Jaw
-    glPushMatrix()
-    glTranslatef(0, 2, -15)
-    glScalef(0.65, 0.55, 0.45)
-    glutSolidCube(20)
-    glPopMatrix()
-
-    # Eye sockets
-    glColor3f(0.02, 0.02, 0.02)
-
-    glPushMatrix()
-    glTranslatef(-8, -17, 5)
-    glutSolidSphere(5, 8, 6)
-    glPopMatrix()
-
-    glPushMatrix()
-    glTranslatef(8, -17, 5)
-    glutSolidSphere(5, 8, 6)
-    glPopMatrix()
-
-    # Nose
-    glPushMatrix()
-    glTranslatef(0, -18, -3)
-    glScalef(0.5, 0.4, 0.8)
-    glutSolidCone(5, 8, 6, 1)
-    glPopMatrix()
-
-    # Teeth
-    glColor3f(0.85, 0.82, 0.72)
-
-    for x in [-7, -3.5, 0, 3.5, 7]:
-        glPushMatrix()
-        glTranslatef(x, -18, -14)
-        glScalef(0.25, 0.3, 0.5)
-        glutSolidCube(8)
-        glPopMatrix()
-
-    glPopMatrix()
-
 def draw_game():
     for room in room_list:
         room.draw()
         
     for item in item_list:
-        item.draw()
+        distance = math.sqrt((player.x - item.x)**2 + (player.y - item.y)**2)
+        if distance < 1000:
+            item.draw()
         
     for item in static_item_list:
-        item.draw()
+        distance = math.sqrt((player.x - item.x)**2 + (player.y - item.y)**2)
+        if distance < 1000:
+            item.draw()
         
     for trap in trap_list:
-        trap.draw()
+        distance = math.sqrt((player.x - trap.x)**2 + (player.y - trap.y)**2)
+        if distance < 1000:
+            trap.draw()
+        
+    for enemy in enemy_list:
+        enemy.draw()
         
     # draw_skull()
     player.draw()
     hud.draw()
-    
-    
 
 def draw_escaped():
     glColor4f(1, 0, 0, 1)
