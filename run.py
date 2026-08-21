@@ -17,6 +17,7 @@ fovY = 120  # Field of view
 
 # GAME CONSTANTS
 FIRST_PERSON = True
+CHEAT_MODE = False
 
 # GAME_STATE
 #   - MENU
@@ -139,7 +140,7 @@ class UNIT_WALL:
             r += 0.03
             g += 0.02
             b += 0.01
-        glColor4f(r, g, b, a)
+        glColor4f(r, g, b, 0.9)
         
         glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
@@ -673,7 +674,7 @@ class HUD:
     def draw_player_shield(self):
         if not player.armor_on:
             return
-        draw_text(-350, 180, "Shield")
+        draw_text(-350, 180, f"Shield {int(player.shield)}/100")
         bar_color = (0.10, 0.65, 0.75)
         draw_rect(-275 - (150 - (150 * (player.shield/100)))//2, 185, 150 * (player.shield/100), 20, bar_color)
         
@@ -805,6 +806,47 @@ class SKULL(STATIC_OBJECT):
 
         glPopMatrix()
 
+class HINT_ARROW(STATIC_OBJECT):
+    def __init__(self, x, y, z, width, depth, height, isLightSource=False):
+        super().__init__(x, y, z, width, height, depth, isLightSource)
+        self.d = 0
+        self.angle = 0
+        self.upward = True
+        
+    def draw(self):
+        glPushMatrix()
+        
+        glTranslatef(self.x, self.y, self.z)
+        glRotatef(self.angle, 0, 0, 1)
+        glTranslatef(0, 0, self.d)
+        
+        
+        glColor4f(1.0, 0.84, 0.2, 0.8)
+        glPushMatrix()
+        glScalef(self.width, self.depth, self.height)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glColor4f(1.0, 0.45, 0.0, 0.8)
+        glPushMatrix()
+        glTranslatef(0, 0, -self.height*0.5)
+        glRotatef(45, 1, 0, 0)
+        glScalef(self.width+1, self.width+1, self.width+1)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glPopMatrix()
+        
+    def update(self):
+        if self.upward:
+            self.d += 0.2
+        else:
+            self.d -= 0.2
+            
+        if self.d > 10 or self.d <= -10:
+            self.upward = not self.upward
+        self.angle += 1
+
 class DOOR:
     def __init__(self, x, y, z, width, height, required_key_name=None):
         self.x = x
@@ -915,12 +957,42 @@ class ITEM:
         self.isLightSource = isLightSource
         
     def draw(self):
+        if not self.visible:
+            return
+        r, g, b = self.color
+        glPushMatrix()
+        glTranslatef(self.x, self.y, 30)
+        glRotatef(self.rotation, 0, 0, 1)
+        
+        glColor4f(r, g, b, 1)
+        gluSphere(gluNewQuadric(), 8, 10, 10)
+        
+        glPopMatrix()
+    
+    def collision_detection(self, x, y, radius):
+        if not self.active:
+            return
+        min_x = self.x - self.radius
+        max_x = self.x + self.radius
+        
+        min_y = self.y - self.radius
+        max_y = self.y + self.radius
+        if (x + radius > min_x and x - radius < max_x and y + radius > min_y and y - radius < max_y):
+            try:
+                self.callBack()
+            except:
+                pass
+
+    def keyboard_listener(self, key):
         pass
+    
+    def update(self):
+        self.rotation += 1
+
 
 class KEY(ITEM):
     def __init__(self, x, y, z, width, height, depth, radius, color, visible=True, active=True, callback=None, rotation=0, name="KEY_X"):
         super().__init__(x, y, z, width, height, depth, radius, color, visible, active, callback, rotation, isLightSource=True)
-        self.solid = False
         self.name = name
     
     def draw(self):
@@ -950,32 +1022,44 @@ class KEY(ITEM):
         gluSphere(gluNewQuadric(), 8, 10, 10)
         
         glPopMatrix()
-
-    def collision_detection(self, x, y, radius):
-        if not self.active:
-            return
-        min_x = self.x - self.radius
-        max_x = self.x + self.radius
         
-        min_y = self.y - self.radius
-        max_y = self.y + self.radius
-        if (x + radius > min_x and x - radius < max_x and y + radius > min_y and y - radius < max_y):
-            try:
-                self.callBack()
-            except:
-                pass
-
-    def keyboard_listener(self, key):
-        pass
-        
-    def update(self):
-        self.rotation += 1
-
     def callBack(self):
         self.visible = False
         self.active = False
         player.keys.append((self.name, self.color))
 
+class HEALTH(ITEM):
+    def __init__(self, x, y, z, width, height, depth, radius, color=(0, 1, 0, 1), visible=True, active=True, callback=None, rotation=0, isLightSource=False):
+        super().__init__(x, y, z, width, height, depth, radius, color, visible, active, callback, rotation, isLightSource)
+        
+    def draw(self):
+        if not self.visible:
+            return
+        r, g, b = self.color
+        glPushMatrix()
+        glTranslatef(self.x, self.y, 30)
+        glRotatef(self.rotation, 0, 0, 1)
+        
+        glColor4f(0, 1, 0, 1)
+        
+        glPushMatrix()
+        glScalef(self.width, self.depth, self.height*0.5)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glPushMatrix()
+        glRotatef(90, 1, 0, 0)
+        glScalef(self.width, self.depth, self.height*0.5)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glPopMatrix()
+        
+    def callBack(self):
+        self.visible = False
+        self.active = False
+        if player.health + 5 <= player.max_health:
+            player.health += 5
 
 # TRAPS
 class SPIKETRAP:
@@ -1018,7 +1102,20 @@ class SPIKETRAP:
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
         if distance < self.width//2 + player.width//2 and player.z - player.height//2 < self.height:
             player.damage(self.damage)
-            player.speed -= 20
+            theta = math.radians(player.angle)
+            fx = math.sin(theta)
+            fy = -math.cos(theta)
+            dx = player.x - self.x
+            dy = player.y - self.y
+            distance = math.hypot(dx, dy)
+            dx = dx/distance
+            dy = dy/distance
+            
+            dot = -(dx * fx + dy * fy)
+            if dot < 0:
+                player.speed += 20
+            else:
+                player.speed -= 20
 
 class POISONTRAP:
     def __init__(self, x, y, z, width, height):
@@ -1052,7 +1149,6 @@ class POISONTRAP:
         if distance < self.width//2 + player.width//2 and player.z - player.height//2 < self.height:
             player.damage(self.damage)
             # player.speed -= 20
-
 
 class ENEMY:
     def __init__(self, x, y, z, width, depth, height, radius=30):
@@ -1096,31 +1192,6 @@ class ENEMY:
         
         glPopMatrix()
     
-    def get_enemy_face_direction(self):
-        theta = math.radians(self.angle)
-        fx = -math.cos(theta)
-        fy = -math.sin(theta)
-        return fx, fy
-    
-    def get_player_direction(self):
-        dx = player.x - self.x
-        dy = player.y - self.y
-
-        distance = math.hypot(dx, dy)
-
-        if distance == 0:
-            return 0, 0
-
-        return dx / distance, dy / distance
-    
-    def is_player_in_front(self):
-        fx, fy = self.get_enemy_face_direction()
-        pfx, pfy = self.get_player_direction()
-
-        dot = fx * pfx + fy * pfy
-
-        return abs(1 - dot) < 0.005
-    
     def attack(self):
         if self.attack_cooldown < 0.5:
             player.damage(20)
@@ -1131,7 +1202,7 @@ class ENEMY:
     def collision_detection(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
         if distance < self.radius + 30:
-            # self.attack()
+            self.attack()
             pass
         
     def face_toward_player(self):
@@ -1161,6 +1232,9 @@ class ENEMY:
         return False
             
     def update(self):
+        move_x = True
+        move_y = True
+        
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
         
         if distance < 400:
@@ -1188,14 +1262,22 @@ class ENEMY:
         distance = math.sqrt((new_x - player.x)**2 + (new_y - player.y)**2)
         do_move_forward = self.face_toward_player()
         
+        for room in room_list:
+            move_x = (move_x and not room.collision_detection(new_x, self.y, 10))
+            move_y = (move_y and not room.collision_detection(self.x, new_y, 10))
+        
+        
         if distance > 30 and distance > 90 and do_move_forward:
-            self.x = new_x
-            self.y = new_y
+            if move_x:
+                self.x = new_x
+            if move_y:
+                self.y = new_y
             pass
         
         self.speed *= 0.5
         self.speed += self.accelaration
-    
+
+
 # glutSolidCube(30)
 # gluSphere(gluNewQuadric(), 20, 10, 10)
 # gluCylinder(gluNewQuadric(), 8, 3, 30, 10, 10)
@@ -1289,7 +1371,7 @@ def keyboardListener(key, x, y):
     Handles keyboard inputs for player movement, gun rotation, camera updates, and cheat mode toggles.
     """
     
-    global FIRST_PERSON, KEY_W, KEY_S, text_x, text_y, GAME_STATE
+    global FIRST_PERSON, KEY_W, KEY_S, text_x, text_y, GAME_STATE, CHEAT_MODE
     if GAME_STATE == "GAME":
         if key == b'w':
             player.move(1)
@@ -1323,9 +1405,12 @@ def keyboardListener(key, x, y):
         if key == b'v':
             FIRST_PERSON = not FIRST_PERSON
             
+        if key == b'c':
+            CHEAT_MODE = not CHEAT_MODE
+            
         if key == b' ':
-            # print(room_to_move.x, room_to_move.y)
-            print(debug.text_x, debug.text_y)
+            print(room_to_move.x, room_to_move.y)
+            # print(debug.text_x, debug.text_y)
             player.jump()
             pass
             
@@ -1409,6 +1494,9 @@ def idle(value=0):
         for item in item_list:
             item.update()
             
+        for item in static_item_list:
+            item.update()
+            
         for trap in trap_list:
             trap.update()
             
@@ -1474,15 +1562,16 @@ item_list = []
 static_item_list = []
 enemy_list = []
 trap_list = []
+hint_arrow_list = []
 
 room_to_move = None
 player = None
 hud = None
 
 def game_init():
-    global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list
+    global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list, hint_arrow_list
     
-    player = Player(100, 0)
+    player = Player(0, 0)
     hud = HUD()
     
     room_list = [
@@ -1503,7 +1592,7 @@ def game_init():
     item_list = [
         KEY(-1440, -350, 0, 20, 20, 20, 20, (1, 0, 0), name="0x0001"),
         ESCAPE_DOOR(610, -1270, 50, 50, 100, required_key_name="0x0001"),
-        # DOOR(0, -100, 50, 50, 100),
+        HEALTH(0, -100, 0, 10, 10, 20, 20, (1, 0, 1))
     ]
     
     trap_list = [
@@ -1517,15 +1606,28 @@ def game_init():
     static_item_list = [
         SKULL(-900, -960, 10, 1, 1, 1, 90 + 45, False),
         TORCH(-1690, -140, 25, 10, 50, 10),
-        TORCH(-1690, -610, 25, 10, 50, 10)
+        TORCH(-1690, -610, 25, 10, 50, 10),
+        TORCH(40, -250, 25, 10, 50, 10),
+        TORCH(-50, -250, 25, 10, 50, 10),
     ]
+    
+    hint_arrow_list = [
+        HINT_ARROW(-10, -270, 150, 10, 10, 30),
+        HINT_ARROW(-10, -890, 150, 10, 10, 30),
+        HINT_ARROW(-800, -890, 150, 10, 10, 30),
+        HINT_ARROW(-800, -400, 150, 10, 10, 30),
+        HINT_ARROW(-1210, -340, 150, 10, 10, 30),
+    ]
+    
+    # static_item_list.extend(hint_arrow_list)
     
     enemy_list = [
-        ENEMY(0, -100, 25, 30, 10, 80)
+        # ENEMY(-210, -230, 25, 30, 10, 80),
+        # ENEMY(-210, 170, 25, 30, 10, 80),
     ]
-    
-    room_to_move = TORCH(-1690, -610, 25, 10, 50, 10)
-    static_item_list.append(room_to_move)
+
+    room_to_move = HINT_ARROW(-800, -400, 150, 10, 10, 30)
+    # static_item_list.append(room_to_move)
 
 game_init()
  
@@ -1559,6 +1661,11 @@ def draw_game():
         distance = math.sqrt((player.x - item.x)**2 + (player.y - item.y)**2)
         if distance < 1000:
             item.draw()
+            
+    for item in hint_arrow_list:
+        distance = math.sqrt((player.x - item.x)**2 + (player.y - item.y)**2)
+        if distance < 1000 and CHEAT_MODE:
+            item.draw()
         
     for trap in trap_list:
         distance = math.sqrt((player.x - trap.x)**2 + (player.y - trap.y)**2)
@@ -1568,7 +1675,6 @@ def draw_game():
     for enemy in enemy_list:
         enemy.draw()
         
-    # draw_skull()
     player.draw()
     hud.draw()
 
