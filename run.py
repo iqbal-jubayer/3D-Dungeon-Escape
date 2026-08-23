@@ -16,15 +16,18 @@ fovY = 120  # Field of view
 DRAWING_RADIUS = 1000
 
 # GAME CONSTANTS
-FIRST_PERSON = True
 CHEAT_MODE = False
+VIEW_MODE = 0
+
+SECONDS = 0
+BEST_SECONDS = 0
 
 # GAME_STATE
 #   - MENU
 #   - HELP
 #   - GAME
 #   - ESCAPED
-GAME_STATE = "GAME"
+GAME_STATE = "MENU"
 
 # classes
 class BUTTON:
@@ -64,20 +67,7 @@ class CAMERA:
         fx = math.sin(theta)
         fy = -math.cos(theta)
         
-        if False:
-            self.camera_x = player.x - fx * self.distance
-            self.camera_y = player.y - fy * self.distance
-            
-            self.camera_x = player.x
-            self.camera_y = player.y + self.distance
-            self.camera_z = 1000
-            
-            self.target_x = player.x
-            self.target_y = player.y
-            self.target_z = 0
-            return
-        
-        if False:
+        if VIEW_MODE == 0:
             self.camera_x = player.x + fx * 10
             self.camera_y = player.y - fy * -20
             self.camera_z = (player.z - player.height//2) + player.height
@@ -85,9 +75,17 @@ class CAMERA:
             self.target_x = player.x + fx * self.distance
             self.target_y = player.y + fy * self.distance
             self.target_z = (player.z - player.height) + player.height * 1.5
-            return
-        
-        if not FIRST_PERSON:
+            
+        elif VIEW_MODE == 1:
+            self.camera_x = player.x - fx * (self.distance + self.target_up)
+            self.camera_y = player.y - fy * (self.distance + self.target_up)
+            self.camera_z = (player.z - player.height//2) + player.height * 1.2
+            
+            self.target_x = player.x + fx * self.distance
+            self.target_y = player.y + fy * self.distance
+            self.target_z = (player.z - player.height) + player.height * 1
+            
+        elif VIEW_MODE == 2:
             self.camera_x = player.x - fx * self.distance
             self.camera_y = player.y - fy * self.distance
             
@@ -98,15 +96,18 @@ class CAMERA:
             self.target_x = player.x
             self.target_y = player.y
             self.target_z = 0
-            return
-        
-        self.camera_x = player.x - fx * (self.distance + self.target_up)
-        self.camera_y = player.y - fy * (self.distance + self.target_up)
-        self.camera_z = (player.z - player.height//2) + player.height * 1.2
-        
-        self.target_x = player.x + fx * self.distance
-        self.target_y = player.y + fy * self.distance
-        self.target_z = (player.z - player.height) + player.height * 1
+        else:
+            self.camera_x = player.x - fx * self.distance
+            self.camera_y = player.y - fy * self.distance
+            
+            self.camera_x = player.x
+            self.camera_y = player.y + self.distance
+            self.camera_z = 1000
+            
+            self.target_x = player.x
+            self.target_y = player.y
+            self.target_z = 0
+            
 
 
 
@@ -366,6 +367,9 @@ class TUNNEL(AREA):
 
 
 class Player:
+    
+    life = 3
+    
     health = 100
     max_health = 100
     
@@ -399,9 +403,11 @@ class Player:
     
     attack_on = False
     sword_angle = 0
-    sword_swip_direction = 1
+    sword_swing_direction = 1
+    sword_swing_on = False
     
     damage_cooldown = 0
+    
     
     def __init__(self, x, y):
         self.x = x
@@ -412,6 +418,10 @@ class Player:
         self.height = 80
         self.z = self.height//2
         self.keys = []
+        self.check_point = (x, y)
+        
+    def reg_check_point(self, x, y):
+        self.check_point(x, y)
         
     def jump(self):
             if self.on_air:
@@ -635,19 +645,29 @@ class Player:
         player.rotating = True  
 
     def attack(self):
-        pass
+        player.attack_on = True
+        player.sword_swing_on = True
     
     def update(self):
-        if self.attack_on:
-            self.sword_angle = (self.sword_angle + 6 * self.sword_swip_direction) % 360
+        global GAME_STATE
+        if self.life <= 0:
+            GAME_STATE = "GAMEOVER"
+        if self.health <= 0:
+            self.life -= 1
+            self.health = 100
+            self.x, self.y = self.check_point
+            self.z += 30
+            self.angle = 0
+        if self.sword_swing_on:
+            self.sword_angle = (self.sword_angle + 6 * self.sword_swing_direction) % 360
         
         if self.sword_angle >= 60:
-            self.sword_swip_direction *= -1
+            self.sword_swing_direction *= -1
             
         elif self.sword_angle <= 0:
             self.sword_angle = 0
-            self.sword_swip_direction = 1
-            self.attack_on = False
+            self.sword_swing_direction = 1
+            self.sword_swing_on = False
         
         if self.damage_cooldown >= 0:
             self.damage_cooldown -= 1
@@ -725,6 +745,24 @@ class HUD:
     def draw_fps(self):
         fps = math.ceil(1/dt)
         draw_text(280, 240, f"FPS: {fps}")
+        
+    def draw_time(self):
+        global SECONDS
+        SECONDS += dt
+        s = int(SECONDS)
+        m = int(s/60)
+        s = int(s%60)
+        if s < 10:
+            draw_text(261, 220, f"Time: {m}:0{s}")
+        else:
+            draw_text(261, 220, f"Time: {m}:{s}")
+        
+    def draw_instructions(self):
+        string = "Move = w,a,s,d | Sword = L-Click | Fire = R-Click | View = v | Slow Time = z |"
+        draw_text(-WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2 + 10, string)
+        
+    def draw_life(self):
+        draw_text(-WINDOW_SIZE[0]//2 + 10, WINDOW_SIZE[1]//2 - 150, f"Life: {player.life}")
     
     def draw(self):
         glMatrixMode(GL_PROJECTION)
@@ -739,6 +777,9 @@ class HUD:
         self.draw_player_health()
         self.draw_player_shield()
         self.draw_fps()
+        self.draw_instructions()
+        self.draw_life()
+        self.draw_time()
             
             
         # Restore original projection and modelview matrices
@@ -1833,7 +1874,7 @@ def keyboardListener(key, x, y):
     Handles keyboard inputs for player movement, gun rotation, camera updates, and cheat mode toggles.
     """
     
-    global FIRST_PERSON, KEY_W, KEY_S, text_x, text_y, GAME_STATE, CHEAT_MODE
+    global KEY_W, KEY_S, text_x, text_y, GAME_STATE, CHEAT_MODE, VIEW_MODE
     if GAME_STATE == "GAME":
         if key == b'w':
             player.move(1)
@@ -1865,7 +1906,7 @@ def keyboardListener(key, x, y):
             player.armor_on = not player.armor_on
             
         if key == b'v':
-            FIRST_PERSON = not FIRST_PERSON
+            VIEW_MODE = (VIEW_MODE + 1)%4
             
         if key == b'c':
             CHEAT_MODE = not CHEAT_MODE
@@ -1927,13 +1968,17 @@ def mouseListener(button, state, x, y):
             
     elif GAME_STATE == "GAME":
         if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
-            player.attack_on = True
+            player.attack()
         if button == 3:
             camera.target_up += 1
         if button == 4:
             camera.target_up -= 1
 
     elif GAME_STATE == "ESCAPED":
+        if button == GLUT_LEFT_BUTTON and state == GLUT_UP:
+            main_menu_button.click(x, y, main_menu_button_callback)
+    
+    elif GAME_STATE == "GAMEOVER":
         if button == GLUT_LEFT_BUTTON and state == GLUT_UP:
             main_menu_button.click(x, y, main_menu_button_callback)
 
@@ -2156,12 +2201,32 @@ def draw_game():
     hud.draw()
 
 def draw_escaped():
+    global BEST_SECONDS, SECONDS
+    if SECONDS < BEST_SECONDS or BEST_SECONDS is None:
+        BEST_SECONDS = SECONDS
     glColor4f(1, 0, 0, 1)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
     end_quote = "A NEW LIFE BEGINS"
+    draw_text(-6*len(end_quote), 120, end_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
+    s = int(SECONDS)
+    m = int(s/60)
+    s = int(s%60)
+    if s < 10:
+        time_quote = f"Time: {m}:0{s}"
+    else:
+        time_quote = f"Time: {m}:{s}"
+    draw_text(-6*len(time_quote), 90, time_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
+    main_menu_button.draw()
+    
+def draw_game_over():
+    glColor4f(1, 0, 0, 1)
+    draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
+    
+    end_quote = "GAME OVER!"
     draw_text(-6*len(end_quote), 100, end_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
     main_menu_button.draw()
+    game_init()
 
 def showScreen():
     """
@@ -2190,6 +2255,10 @@ def showScreen():
         glDisable(GL_DEPTH_TEST)
         setup_projection()
         draw_escaped()
+    elif GAME_STATE == "GAMEOVER":
+        glDisable(GL_DEPTH_TEST)
+        setup_projection()
+        draw_game_over()
         
     
     glutSwapBuffers()
