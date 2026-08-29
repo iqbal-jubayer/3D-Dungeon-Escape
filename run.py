@@ -7,6 +7,7 @@ os.environ["PYOPENGL_PLATFORM"] = "glx"
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
+import time
 import math
 import random
 
@@ -17,17 +18,107 @@ DRAWING_RADIUS = 1000
 
 # GAME CONSTANTS
 CHEAT_MODE = False
-VIEW_MODE = 0
+VIEW_MODE = 1
 
 SECONDS = 0
-BEST_SECONDS = 0
+
+last_time = time.time()
+dt = 1
 
 # GAME_STATE
 #   - MENU
 #   - HELP
+#   - ROOM SELECT
 #   - GAME
 #   - ESCAPED
+#   - PLAYER_SELECTION
 GAME_STATE = "MENU"
+
+ROOM_LEVEL = 1
+
+def updateLevel():
+    global ROOM_LEVEL
+    ROOM_LEVEL += 1
+
+def getDistance(obj1_x, obj1_y, obj2_x, obj2_y):
+    distance = math.sqrt((obj1_x - obj2_x)**2 + (obj1_y - obj2_y)**2)
+    return distance
+
+def convert_coordinate(x, y):
+    """
+    Converts mouse (screen) coordinates to OpenGL (Cartesian) coordinates.
+    Top-left of the window is (0,0) in screen space,
+    but OpenGL center is (0,0).
+    """
+    a = x - (WINDOW_SIZE[0] / 2)
+    b = (WINDOW_SIZE[1] / 2) - y
+    return a, b
+
+def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18, color=(1,1,1)):
+    r, g, b = color
+    glColor4f(r, g, b, 1)
+    glMatrixMode(GL_PROJECTION)
+    glPushMatrix()
+    glLoadIdentity()
+    
+    # Set up an orthographic projection that matches window coordinates
+    # gluOrtho2D(0, 1000, 0, 800)  # left, right, bottom, top
+    gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
+
+    
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    glLoadIdentity()
+    
+    # Draw text at (x, y) in screen coordinates
+    glRasterPos2f(x, y)
+    for ch in text:
+        glutBitmapCharacter(font, ord(ch))
+    
+    # Restore original projection and modelview matrices
+    glPopMatrix()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+
+def draw_point(size, x, y, z, color=(1,1,1,1)):
+    r, g, b, a = color
+    glColor4f(r, g, b, 1)
+    glPointSize(size)
+    glBegin(GL_POINTS)
+    glVertex3f(x, y, z)
+    glEnd()
+    
+def draw_rect(x, y, width, height, color=(1,1,1), color1=None, color2=None,color3=None):
+    if color1 is None:
+        color1 = color
+        
+    if color2 is None:
+        color2 = color
+        
+    if color3 is None:
+        color3 = color
+        
+    r, g, b = color
+    r1, g1, b1 = color1
+    r2, g2, b2 = color2
+    r3, g3, b3 = color3
+    glBegin(GL_QUADS)
+    
+    glColor4f(r, g, b, 1)
+    glVertex3f(x+width//2, y-height//2, 0)
+    
+    glColor4f(r1, g1, b1, 1)
+    glVertex3f(x-width//2, y-height//2, 0)
+    
+    glColor4f(r2, g2, b2, 1)
+    glVertex3f(x-width//2, y+height//2, 0)
+    
+    glColor4f(r3, g3, b3, 1)
+    glVertex3f(x+width//2, y+height//2, 0)
+    glEnd()
+
+
 
 # classes
 class BUTTON:
@@ -43,10 +134,10 @@ class BUTTON:
         draw_rect(self.x, self.y, self.width, self.height, color=self.color)
         draw_text(self.x-5*len(self.text), self.y, self.text, color=(0,0,0))
         
-    def click(self, mouseX, mouseY, callback=None):
+    def click(self, mouseX, mouseY, callback=None, *args):
         if self.x - self.width//2 < mouseX < self.x + self.width//2 and self.y - self.height//2 < mouseY < self.y + self.height//2:
             if callback is not None:
-                callback()
+                callback(*args)
 
 class CAMERA:
     camera_x = 0
@@ -61,29 +152,41 @@ class CAMERA:
 
     def __init__(self):
         self.distance = 40
+        
+    def draw(self):
+        glPushMatrix()
+        glTranslatef(self.target_x, self.target_y, self.target_z)
+        glColor3f(1, 1, 1)
+        glutSolidCube(1)
+        glPopMatrix()
 
     def update(self):
         theta = math.radians(player.angle)
         fx = math.sin(theta)
         fy = -math.cos(theta)
         
+        if self.target_up >= 45:
+            self.target_up = 45
+        elif self.target_up <= -25:
+            self.target_up = -25
+        
         if VIEW_MODE == 0:
-            self.camera_x = player.x + fx * 10
+            self.camera_x = player.x + fx * 20
             self.camera_y = player.y - fy * -20
-            self.camera_z = (player.z - player.height//2) + player.height
+            self.camera_z = player.z + player.height//2
             
-            self.target_x = player.x + fx * self.distance
-            self.target_y = player.y + fy * self.distance
-            self.target_z = (player.z - player.height) + player.height * 1.5
+            self.target_x = player.x + fx * self.distance * 2
+            self.target_y = player.y + fy * self.distance * 2
+            self.target_z = player.z + player.height//2
             
         elif VIEW_MODE == 1:
-            self.camera_x = player.x - fx * (self.distance + self.target_up)
-            self.camera_y = player.y - fy * (self.distance + self.target_up)
-            self.camera_z = (player.z - player.height//2) + player.height * 1.2
+            self.camera_x = player.x - fx * self.distance
+            self.camera_y = player.y - fy * self.distance
+            self.camera_z = player.z + player.height + self.target_up
             
             self.target_x = player.x + fx * self.distance
             self.target_y = player.y + fy * self.distance
-            self.target_z = (player.z - player.height) + player.height * 1
+            self.target_z = player.z + player.height//2
             
         elif VIEW_MODE == 2:
             self.camera_x = player.x - fx * self.distance
@@ -107,7 +210,6 @@ class CAMERA:
             self.target_x = player.x
             self.target_y = player.y
             self.target_z = 0
-            
 
 
 
@@ -126,7 +228,7 @@ class UNIT_WALL:
         
     def draw(self):
         r, g, b, a = self.color
-        distance = math.sqrt((self.x + self.col_x - player.x)**2 + (self.y + self.col_y - player.y)**2)
+        distance = getDistance(self.x + self.col_x, self.y + self.col_y, player.x, player.y)
         if distance < 75:
             r += 0.15
             g += 0.10
@@ -294,7 +396,7 @@ class AREA:
                 pass
 
 class ROOM(AREA):
-    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.08, 0.10, 0.13, 1), floor_color=(0.12, 0.10, 0.08, 1), door_at="tblf", gap_at=""):
+    def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.28, 0.20, 0.14, 1), floor_color=(0.18, 0.18, 0.17, 1), door_at="tblf", gap_at=""):
         super().__init__(x, y, width, length, tile_size, floor_color)
         
         wall_height = 100
@@ -315,6 +417,7 @@ class ROOM(AREA):
         TOP_WALL = create_vertical_wall(-self.width*ts, -self.length*ts-20, 25, self.tile_size, self.width, wall_height, self.x, self.y, wall_color, 1)
         TOP_LEFT = create_vertical_wall(-self.width*ts, -self.length*ts-20, 25, self.tile_size, int(self.width/2) + (self.width%2), wall_height, self.x, self.y, wall_color, 1)
         TOP_RIGHT = create_vertical_wall(-self.width*ts + (self.width/2+1)*self.tile_size, -self.length*ts-20,25,self.tile_size,int(self.width/2) + (self.width%2-1),wall_height,self.x,self.y,wall_color,1)
+        
         
         # Bottom
         BOTTOM_WALL = create_vertical_wall(-self.width*ts, (self.length-1)*ts, 25, self.tile_size, self.width, wall_height, self.x, self.y, wall_color, 1)
@@ -346,7 +449,7 @@ class ROOM(AREA):
             self.walls.extend(LEFT_WALL)
             
 class TUNNEL(AREA):
-    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.08, 0.10, 0.13, 1), floor_color=(0.12, 0.10, 0.08, 1)):
+    def __init__(self, x, y, width, length, tile_size=50, type="VERTICAL", wall_color=(0.28, 0.20, 0.14, 1), floor_color=(0.12, 0.10, 0.08, 1)):
         super().__init__(x, y, width, length, tile_size, floor_color)
         
         wall_height = 100
@@ -366,254 +469,175 @@ class TUNNEL(AREA):
             self.walls.extend(RIGHT)
 
 
-class Player:
-    
-    life = 3
-    
-    health = 100
-    max_health = 100
-    
-    shield = 100
-    max_shield = 100
-    
-    moving = False
-    moved = 0
-    speed = 0
-    acc = 300
-    
-    angle = 0
-    rotated = 0
-    rotating = False
-    rotation_direction = 0
-    rotation_speed = 10
-    rotation_acc = 1
-    
-    
-    keys = []
-    
-    leg_angle = 0
-    leg_angle_dir = 1
-    leg_angle_limit = 20
-    
-    armor_on = False
-    
-    on_air = False
-    speedZ = 0
-    jump_acc = 150
-    
-    attack_on = False
-    sword_angle = 0
-    sword_swing_direction = 1
-    sword_swing_on = False
-    
-    damage_cooldown = 0
-    
-    
+
+class BULLET:
+    def __init__(self, x, y, z, dir_x, dir_y):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.speed = 500
+        
+        self.direction_x = dir_x
+        self.direction_y = dir_y
+        
+        self.active = True
+        
+    def draw(self):
+        if not self.active:
+            return
+        glPushMatrix()
+        glTranslatef(self.x ,self.y, self.z)
+        glColor3f(1, 0, 0)
+        glutSolidCube(3)
+        glPopMatrix()
+        
+    def update(self):
+        if not self.active:
+            return
+        self.x += self.direction_x * dt * self.speed
+        self.y += self.direction_y * dt * self.speed
+        
+        for enemy in enemy_list:
+            distance = getDistance(self.x, self.y, enemy.x, enemy.y)
+            if distance <= enemy.radius:
+                self.active = False
+                enemy.get_damage(30)
+                
+        
+        for room in room_list:
+            collided = room.collision_detection(self.x, self.y, 5)
+            if collided:
+                self.active = False
+
+class PLAYER:
     def __init__(self, x, y):
         self.x = x
         self.y = y
+        self.z = 100
         
         self.width = 30
         self.depth = 10
-        self.height = 80
-        self.z = self.height//2
-        self.keys = []
+        self.height = 60
+        self.radius = 30
         self.check_point = (x, y)
+        
+        self.keys = []
+        
+        self.life = 3
+            
+        self.health = 100
+        self.max_health = 100
+        
+        self.shield = 100
+        self.max_shield = 100
+        
+        self.moving = False
+        self.moved = 0
+        self.speed = 0
+        self.acc = 12000
+        
+        self.sprint = False
+        self.sprint_acc = 24000
+        
+        self.angle = 0
+        self.rotated = 0
+        self.rotating = False
+        self.rotation_direction = 0
+        self.rotation_speed = 10
+        self.rotation_acc = 1
+        
+        self.armor_on = False
+        
+        self.on_air = False
+        self.speedZ = 0
+        
+        self.damage_cooldown = 0
+        
+        self.body_angle = 0
+        self.body_angle_direction = 1
+        self.body_angle_limit = 30
+        self.body_movement_speed = 600
+    
+        self.attack_on = False
+        self.attack_angle = 0
+        self.attack_phase = "raise"
+        self.attack_speed = 2000
+        self.attack_left_arm = False
+        
+        self.bullets = []
         
     def reg_check_point(self, x, y):
         self.check_point(x, y)
         
     def jump(self):
-            if self.on_air:
-                return
+        if not self.on_air:
             self.on_air = True
-            self.speedZ = 10
+            self.speedZ = 200
         
-    def jump_update(self):
-        self.z += self.speedZ
-        self.speedZ -= 0.5
-        if self.z <= self.height // 2:
-            self.z = self.height // 2
+    def update_jump(self):
+        if self.z >= 0:
+            self.z += self.speedZ * dt
+        self.speedZ -= 500 * dt
+        
+        if self.z <= self.height/2:
+            self.z = self.height/2
             self.speedZ = 0
             self.on_air = False
+            
         if self.on_air:
-            self.move(1)
+            if self.speed != 0:
+                self.move(0.45 * self.speed/abs(self.speed))
     
-    def draw(self):
+    def fire(self):
+        if not self.attack_on:
+            dx, dy = self.get_face_point()
+            self.bullets.append(BULLET(self.x, self.y, self.z + self.height//2, dx, dy))
+            self.attack()
+    
+    def attack(self):
+        if not self.attack_on:
+            self.attack_on = True
+            self.attack_phase = "raise"
+            self.attack_angle = 0
+            self.attack_left_arm = not self.attack_left_arm
         
+    def update_attack(self):
+        if not self.attack_on:
+            return
+
+        if self.attack_phase == "raise":
+
+            self.attack_angle += self.attack_speed * dt
+
+            if self.attack_angle >= 100:
+                self.attack_angle = 100
+                self.attack_phase = "swing"
+
+        elif self.attack_phase == "swing":
+
+            self.attack_angle -= 600 * dt
+
+            if self.attack_angle <= 0:
+                self.attack_angle = 0
+                self.attack_phase = "finished"
+
+        elif self.attack_phase == "finished":
+
+            self.attack_on = False
+    
+    def draw_player(self):
         glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
         glRotatef(self.angle, 0, 0, 1)
         
-        # Head
-        glPushMatrix()
-        glColor4f(0.72, 0.45, 0.25, 1)
-        glTranslatef(0, 0, self.height//2 - self.height*0.1)
-        glScalef(self.width*0.4, self.width*0.4, self.width*0.4)
-        gluSphere(gluNewQuadric(), 1, 20, 20)
-        glPopMatrix()
-        
-        
-        # Body
-        glPushMatrix()
-        glColor4f(0.25, 0.35, 0.12, 1)
-        if self.armor_on:
-            glColor4f(0.08, 0.55, 0.65, 1)
-        glTranslatef(0, 0, self.height*0.5 - self.height*0.45)
-        glScalef(self.width, self.depth, self.height*0.5)
-        glutSolidCube(1)
-        glPopMatrix()
-        
-        
-        # Right Leggings
-        glPushMatrix()
-        glTranslatef(0, 0, -self.height*0.5 + self.height*0.3)
-        glRotatef(self.leg_angle, 1, 0, 0)
-        glTranslatef(0, 0, -(-self.height*0.5 + self.height*0.3))
-        # Right Leg
-        glPushMatrix()
-        glColor4f(0.20, 0.12, 0.07, 1)
-        if self.armor_on:
-            glColor4f(0.06, 0.42, 0.50, 1)
-        glTranslatef(0, 0, -self.height*0.5 + self.height*0.15)
-        glTranslatef(-self.width*0.25, 0, 0)
-        glScalef(self.width*0.4, self.depth, self.height*0.3)
-        glutSolidCube(1)
-        glPopMatrix()
-        
-        # Right Boot
-        glPushMatrix()
-        glColor4f(0.12, 0.07, 0.04, 1)
-        if self.armor_on:
-            glColor4f(0.05, 0.35, 0.42, 1)
-        glTranslatef(0, 0, -self.height*0.5 + self.height*0.05)
-        glTranslatef(-self.width*0.25, 0, 0)
-        glScalef(self.width//2, self.depth+1, self.height*0.1)
-        glutSolidCube(1)
-        glPopMatrix()
-        glPopMatrix()
-        
-        
-        # Left Leggings
-        glPushMatrix()
-        glTranslatef(0, 0, -self.height*0.5 + self.height*0.3)
-        glRotatef(self.leg_angle, -1, 0, 0)
-        # Left Leg - upper
-        glTranslatef(0, 0, -(-self.height*0.5 + self.height*0.3))
-        glPushMatrix()
-        glColor4f(0.20, 0.12, 0.07, 1)
-        if self.armor_on:
-            glColor4f(0.06, 0.42, 0.50, 1)
-        glTranslatef(0, 0, -self.height*0.5 + self.height*0.15)
-        glTranslatef(self.width*0.25, 0, 0)
-        glScalef(self.width*0.4, self.depth, self.height*0.3)
-        glutSolidCube(1)
-        glScalef(1/(self.width*0.4), 1/self.depth, 1/(self.height*0.3))
-        glPopMatrix()
-        
-        # Left Boot
-        glPushMatrix()
-        glColor4f(0.12, 0.07, 0.04, 1)
-        if self.armor_on:
-            glColor4f(0.05, 0.35, 0.42, 1)
-        glTranslatef(0, 0, -self.height*0.5 + self.height*0.05)
-        glTranslatef(self.width*0.25, 0, 0)
-        glScalef(self.width//2, self.depth+1, self.height*0.1)
-        glutSolidCube(1)
-        glPopMatrix()
-        glPopMatrix()
-        
-        
-        # Left Hand
-        glPushMatrix()
-        glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
-        glRotate(self.leg_angle, 1, 0, 0)
-        glTranslatef(-self.width*0.6, 0, -(self.height*0.3 - self.height*0.1))
-        
-        # Left Arm
-        glPushMatrix()
-        glColor4f(0.72, 0.45, 0.25, 1)
-        glTranslatef(self.width*0.6, 0, self.height*0.1)
-        glScalef(self.width*0.2, self.depth, self.height*0.4)
-        glutSolidCube(1)
-        glPopMatrix()
-        
-        # Left Shoulder
-        glPushMatrix()
-        glColor4f(0.25, 0.35, 0.12, 1)
-        if self.armor_on:
-            glColor4f(0.07, 0.45, 0.52, 1)
-        glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
-        glScalef(self.width*0.2+1, self.depth+1, self.height*0.2+1)
-        glutSolidCube(1)
-        glPopMatrix()
-        glPopMatrix()
-        
-        # Right Hand
-        glPushMatrix()
-        glTranslatef(self.width*0.6, 0, self.height*0.3 - self.height*0.1)
-        glRotate(self.leg_angle, -1, 0, 0)
-        glTranslatef(-self.width*0.6, 0, -(self.height*0.3 - self.height*0.1))
-        
-        # Right Arm
-        glPushMatrix()
-        glColor4f(0.72, 0.45, 0.25, 1)
-        glTranslatef(-self.width*0.6, 0, self.height*0.1)
-        glScalef(self.width*0.2, self.depth, self.height*0.4)
-        glutSolidCube(1)
-        glPopMatrix()
-        
-        # Right Shoulder
-        glPushMatrix()
-        glColor4f(0.25, 0.35, 0.12, 1)
-        if self.armor_on:
-            glColor4f(0.07, 0.45, 0.52, 1)
-        glTranslatef(-self.width*0.6, 0, self.height*0.3 - self.height*0.1)
-        glScalef(self.width*0.2+1, self.depth+1, self.height*0.2+1)
-        glutSolidCube(1)
-        glPopMatrix()
-        glPopMatrix()
-        
-        
-        # Sword
-        glPushMatrix()
-        glTranslatef(-self.width * 0.5, -self.depth, 0)
-        glRotatef(30, 1, 0, 0)
-        glRotatef(self.sword_angle, 1, 1, 0)
-        
-        # Blade
-        glPushMatrix()
-        glColor4f(0.75, 0.82, 0.88, 1.0)
-        gluCylinder(gluNewQuadric(), 3, 0, 40, 20, 20)
-        glPopMatrix()
-        
-        # Guard
-        glPushMatrix()
-        glColor4f(0.85, 0.58, 0.12, 1.0)
-        gluSphere(gluNewQuadric(), 4, 10, 10)
-        glPopMatrix()
-        
-        # Handle
-        glPushMatrix()
-        glColor4f(0.22, 0.10, 0.04, 1.0)
-        glTranslatef(0, 0, -10)
-        glScalef(3, 3, 10)
-        glutSolidCube(1)
-        glPopMatrix()
+        glutSolidCube(3)
         
         glPopMatrix()
-        
-        glPopMatrix()
-        
-    def move_leg(self):
-        self.leg_angle += 1 * self.leg_angle_dir
-        
-        if self.leg_angle > self.leg_angle_limit:
-            self.leg_angle = self.leg_angle_limit
-            self.leg_angle_dir *= -1
-        if self.leg_angle < -self.leg_angle_limit:
-            self.leg_angle = -self.leg_angle_limit
-            self.leg_angle_dir *= -1
+    
+    def draw(self):
+        self.draw_player()
+        for bullet in self.bullets:
+            bullet.draw()
     
     def damage(self, point):
         if self.damage_cooldown > 0:
@@ -636,52 +660,36 @@ class Player:
 
     def move(self, direction):
         acc = self.acc
-        if self.on_air:
-            acc = self.jump_acc
+        if self.sprint:
+            acc = self.sprint_acc
         self.speed += acc * dt * direction
     
     def rotate(self, direction):
         player.rotation_direction = direction
         player.rotating = True  
 
-    def attack(self):
-        player.attack_on = True
-        player.sword_swing_on = True
-    
-    def update(self):
-        global GAME_STATE
-        if self.life <= 0:
-            GAME_STATE = "GAMEOVER"
-        if self.health <= 0:
-            self.life -= 1
-            self.health = 100
-            self.x, self.y = self.check_point
-            self.z += 30
-            self.angle = 0
-        if self.sword_swing_on:
-            self.sword_angle = (self.sword_angle + 6 * self.sword_swing_direction) % 360
+    def move_body(self):
+        self.body_angle += abs(self.speed) * dt * self.body_angle_direction
         
-        if self.sword_angle >= 60:
-            self.sword_swing_direction *= -1
-            
-        elif self.sword_angle <= 0:
-            self.sword_angle = 0
-            self.sword_swing_direction = 1
-            self.sword_swing_on = False
-        
-        if self.damage_cooldown >= 0:
-            self.damage_cooldown -= 1
+        if self.body_angle >= self.body_angle_limit:
+            self.body_angle = self.body_angle_limit
+            self.body_angle_direction = -1
 
-        if self.rotating:
-            self.angle += self.rotation_speed * self.rotation_direction
-            self.rotated += 1
-            if self.rotated >= self.rotation_acc:
-                self.rotated = 0
-                self.rotating = False
-        
+        elif self.body_angle <= -self.body_angle_limit:
+            self.body_angle = -self.body_angle_limit
+            self.body_angle_direction = 1
+    
+    def get_face_point(self):
         theta = math.radians(self.angle)
-        dx = math.sin(theta) * self.speed
-        dy = -math.cos(theta) * self.speed
+        dx = math.sin(theta)
+        dy = -math.cos(theta)
+        return dx, dy
+    
+    def update_move(self):
+        
+        dx, dy = self.get_face_point()
+        dx = dx * self.speed * dt
+        dy = dy * self.speed * dt
         
         new_x = self.x + dx
         new_y = self.y + dy
@@ -698,9 +706,9 @@ class Player:
             move_y = (move_y and not item.collision_detection(self.x, new_y, 15))
         
         if abs(self.x - new_x) > 0.1 or abs(self.y - new_y) > 0.1:
-            self.move_leg()
+            self.move_body()
         else:
-            self.leg_angle = 0
+            self.body_angle = 0
             
         if move_x:
             self.x = new_x
@@ -709,8 +717,978 @@ class Player:
             self.y = new_y
             
         self.speed *= 0.5
+        if abs(self.speed) <= 0.5:
+            self.speed = 0
+    
+    def update_rotate(self):
+        if self.rotating:
+            self.angle += self.rotation_speed * self.rotation_direction
+        self.rotated += 1
+        if self.rotated >= self.rotation_acc:
+            self.rotated = 0
+            self.rotating = False
+    
+    def update_bullet(self):
+        for bullet in self.bullets:
+            if bullet.active:
+                bullet.update()
+            else:
+                self.bullets.remove(bullet)
+    
+    def update_life(self):
+        if self.life <= 0:
+            GAME_STATE = "GAMEOVER"
+            
+        if self.health <= 0:
+            self.life -= 1
+            self.health = 100
+            self.x, self.y = self.check_point
+            self.z += 30
+            self.angle = 0
         
-        self.jump_update()
+        if self.damage_cooldown >= 0:
+            self.damage_cooldown -= 1
+    
+    def update(self):
+        global GAME_STATE
+
+        self.update_life()
+        self.update_rotate()
+        self.update_move()
+        self.update_jump()
+        self.update_attack()
+        self.update_bullet()
+
+class WARRIOR(PLAYER):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        
+    def draw_player(self):
+        W = self.width
+        D = self.depth
+        H = self.height
+        
+        glPushMatrix()
+
+        glTranslatef(self.x, self.y, self.z)
+        glRotatef(self.angle, 0, 0, 1)
+
+        # =====================================================
+        # TORSO
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.12, 0.16, 0.22, 1)
+
+        glTranslatef(0, 0, H * 0.05)
+        glScalef(W * 0.95, D, H * 0.48)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # CHEST ARMOR
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.30, 0.35, 0.42, 1)
+
+        glTranslatef(0, -D * 0.52, H * 0.07)
+        glScalef(W * 0.68, D * 0.12, H * 0.40)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # CHEST EMBLEM
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.85, 0.55, 0.08, 1)
+
+        glTranslatef(0, -D * 0.59, H * 0.08)
+        glScalef(W * 0.12, D * 0.03, H * 0.20)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # BELT
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.22, 0.10, 0.04, 1)
+
+        glTranslatef(0, 0, -H * 0.18)
+        glScalef(W * 1.0, D * 1.05, H * 0.08)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # BELT BUCKLE
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.85, 0.60, 0.10, 1)
+
+        glTranslatef(0, -D * 0.56, -H * 0.18)
+        glScalef(W * 0.15, D * 0.04, H * 0.13)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # LEFT LEG
+        # =====================================================
+
+        glPushMatrix()
+
+        glTranslatef(-W * 0.23, 0, -H * 0.28)
+
+        # WALKING PIVOT
+        glRotatef(self.body_angle, 1, 0, 0)
+
+        # -----------------------------------------------------
+        # THIGH ARMOR
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.16, 0.19, 0.24, 1)
+
+        glTranslatef(0, 0, -H * 0.10)
+        glScalef(W * 0.38, D * 0.90, H * 0.30)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+        # -----------------------------------------------------
+        # KNEE ARMOR
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.35, 0.39, 0.45, 1)
+
+        glTranslatef(0, -D * 0.03, -H * 0.25)
+
+        glScalef(W * 0.42, D * 0.95, H * 0.15)
+
+        glutSolidSphere(
+            0.5,
+            12,
+            8
+        )
+
+        glPopMatrix()
+
+        # -----------------------------------------------------
+        # BOOT
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.045, 0.045, 0.055, 1)
+
+        glTranslatef(
+            0,
+            -D * 0.15,
+            -H * 0.28
+        )
+
+        glScalef(
+            W * 0.45,
+            D * 1.30,
+            H * 0.14
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+        # -----------------------------------------------------
+        # BOOT TOE
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.08, 0.08, 0.09, 1)
+
+        glTranslatef(
+            0,
+            -D * 0.65,
+            -H * 0.28
+        )
+
+        glScalef(
+            W * 0.43,
+            D * 0.35,
+            H * 0.14
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # RIGHT LEG
+        # =====================================================
+
+        glPushMatrix()
+
+        glTranslatef(W * 0.23, 0, -H * 0.28)
+
+        # OPPOSITE WALKING MOVEMENT
+        glRotatef(-self.body_angle, 1, 0, 0)
+
+        # -----------------------------------------------------
+        # THIGH ARMOR
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.16, 0.19, 0.24, 1)
+
+        glTranslatef(0, 0, -H * 0.10)
+        glScalef(W * 0.38, D * 0.90, H * 0.30)
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+        # -----------------------------------------------------
+        # KNEE
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.35, 0.39, 0.45, 1)
+
+        glTranslatef(0, -D * 0.03, -H * 0.25)
+
+        glScalef(W * 0.42, D * 0.95, H * 0.15)
+
+        glutSolidSphere(
+            0.5,
+            12,
+            8
+        )
+
+        glPopMatrix()
+
+        # -----------------------------------------------------
+        # BOOT
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.045, 0.045, 0.055, 1)
+
+        glTranslatef(
+            0,
+            -D * 0.15,
+            -H * 0.28
+        )
+
+        glScalef(
+            W * 0.45,
+            D * 1.30,
+            H * 0.14
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+        # -----------------------------------------------------
+        # BOOT TOE
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.08, 0.08, 0.09, 1)
+
+        glTranslatef(
+            0,
+            -D * 0.65,
+            -H * 0.28
+        )
+
+        glScalef(
+            W * 0.43,
+            D * 0.35,
+            H * 0.14
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # LEFT ARM
+        # =====================================================
+
+        glPushMatrix()
+
+        # SHOULDER = PIVOT
+        glTranslatef(
+            -W * 0.58,
+            0,
+            H * 0.25
+        )
+
+        # -----------------------------------------------------
+        # ARM ANIMATION
+        # -----------------------------------------------------
+
+        if self.attack_on and not self.attack_left_arm:
+
+            glRotatef(
+                -self.attack_angle,
+                1, 0, 0
+            )
+
+        else:
+
+            glRotatef(
+                -self.body_angle,
+                1, 0, 0
+            )
+        if self.armor_on:
+            # =====================================================
+            # SHIELD
+            # =====================================================
+
+            glPushMatrix()
+
+            glTranslatef(
+                -W * 0.2,
+                -D * 0.30,
+                -H * 0.02
+            )
+
+            glColor4f(0.25, 0.30, 0.38, 1)
+
+            glScalef(
+                W * 0.12,
+                D * 0.60,
+                H * 0.5
+            )
+
+            gluSphere(
+                gluNewQuadric(),
+                1,
+                16,
+                12
+            )
+
+            glPopMatrix()
+
+
+            # =====================================================
+            # SHIELD EMBLEM
+            # =====================================================
+
+            glPushMatrix()
+
+            glTranslatef(
+                -W * 0.3,
+                -D * 0.49,
+                -H * 0.02
+            )
+
+            glColor4f(0.90, 0.62, 0.10, 1)
+
+            glScalef(
+                W * 0.035,
+                D * 0.035,
+                H * 0.25
+            )
+
+            glutSolidCube(1)
+
+            glPopMatrix()
+            
+            
+
+        # -----------------------------------------------------
+        # SHOULDER ARMOR
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.35, 0.40, 0.48, 1)
+
+        glTranslatef(
+            0,
+            0,
+            H * 0.02
+        )
+
+        glScalef(
+            W * 0.38,
+            D * 0.95,
+            H * 0.25
+        )
+
+        glutSolidSphere(
+            0.5,
+            12,
+            10
+        )
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # UPPER ARM
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.16, 0.20, 0.26, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.11
+        )
+
+        glScalef(
+            W * 0.25,
+            D * 0.85,
+            H * 0.28
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # ELBOW
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.38, 0.42, 0.48, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.25
+        )
+
+        glScalef(
+            W * 0.27,
+            D * 0.90,
+            H * 0.16
+        )
+
+        glutSolidSphere(
+            0.5,
+            10,
+            8
+        )
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # FOREARM
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.12, 0.15, 0.20, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.34
+        )
+
+        glScalef(
+            W * 0.23,
+            D * 0.80,
+            H * 0.20
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # GAUNTLET
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.30, 0.34, 0.40, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.43
+        )
+
+        glScalef(
+            W * 0.27,
+            D * 0.85,
+            H * 0.13
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # HAND
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.55, 0.32, 0.20, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.52
+        )
+
+        glScalef(
+            W * 0.25,
+            D * 0.85,
+            W * 0.25
+        )
+
+        gluSphere(
+            gluNewQuadric(),
+            1,
+            10,
+            10
+        )
+
+        glPopMatrix()
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # RIGHT ARM
+        # =====================================================
+
+        glPushMatrix()
+
+        # SHOULDER = PIVOT
+        glTranslatef(
+            W * 0.58,
+            0,
+            H * 0.25
+        )
+
+        # -----------------------------------------------------
+        # ATTACK / WALK ANIMATION
+        # -----------------------------------------------------
+
+        if self.attack_on and self.attack_left_arm:
+
+            glRotatef(
+                -self.attack_angle,
+                1, 0, 0
+            )
+
+        else:
+
+            glRotatef(
+                self.body_angle,
+                1, 0, 0
+            )
+
+        # -----------------------------------------------------
+        # SHOULDER ARMOR
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.35, 0.40, 0.48, 1)
+
+        glTranslatef(
+            0,
+            0,
+            H * 0.02
+        )
+
+        glScalef(
+            W * 0.38,
+            D * 0.95,
+            H * 0.25
+        )
+
+        glutSolidSphere(
+            0.5,
+            12,
+            10
+        )
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # UPPER ARM
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.16, 0.20, 0.26, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.11
+        )
+
+        glScalef(
+            W * 0.25,
+            D * 0.85,
+            H * 0.28
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # ELBOW
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.38, 0.42, 0.48, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.25
+        )
+
+        glScalef(
+            W * 0.27,
+            D * 0.90,
+            H * 0.16
+        )
+
+        glutSolidSphere(
+            0.5,
+            10,
+            8
+        )
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # FOREARM
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.12, 0.15, 0.20, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.34
+        )
+
+        glScalef(
+            W * 0.23,
+            D * 0.80,
+            H * 0.20
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # GAUNTLET
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.30, 0.34, 0.40, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.43
+        )
+
+        glScalef(
+            W * 0.27,
+            D * 0.85,
+            H * 0.13
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # -----------------------------------------------------
+        # HAND
+        # -----------------------------------------------------
+
+        glPushMatrix()
+
+        glColor4f(0.55, 0.32, 0.20, 1)
+
+        glTranslatef(
+            0,
+            0,
+            -H * 0.52
+        )
+
+        glScalef(
+            W * 0.25,
+            D * 0.85,
+            W * 0.25
+        )
+
+        gluSphere(
+            gluNewQuadric(),
+            1,
+            10,
+            10
+        )
+
+        glPopMatrix()
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # NECK
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.55, 0.32, 0.20, 1)
+
+        glTranslatef(
+            0,
+            0,
+            H * 0.40
+        )
+
+        glScalef(
+            W * 0.28,
+            D * 0.30,
+            W * 0.25
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # HEAD
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.55, 0.32, 0.20, 1)
+
+        glTranslatef(
+            0,
+            0,
+            H * 0.55
+        )
+
+        glScalef(
+            W * 0.45,
+            W * 0.45,
+            W * 0.45
+        )
+
+        gluSphere(
+            gluNewQuadric(),
+            1,
+            20,
+            16
+        )
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # HELMET
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.07, 0.08, 0.11, 1)
+
+        glTranslatef(
+            0,
+            0,
+            H * 0.69
+        )
+
+        glScalef(
+            W * 0.53,
+            W * 0.53,
+            W * 0.25
+        )
+
+        gluSphere(
+            gluNewQuadric(),
+            1,
+            16,
+            10
+        )
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # HELMET VISOR
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.025, 0.025, 0.03, 1)
+
+        glTranslatef(
+            0,
+            -W * 0.40,
+            H * 0.61
+        )
+
+        glScalef(
+            W * 0.48,
+            W * 0.08,
+            W * 0.13
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # HELMET CREST
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.65, 0.08, 0.05, 1)
+
+        glTranslatef(
+            0,
+            0,
+            H * 0.86
+        )
+
+        glScalef(
+            W * 0.12,
+            W * 0.25,
+            W * 0.35
+        )
+
+        glutSolidCone(
+            0.5,
+            1,
+            8,
+            4
+        )
+
+        glPopMatrix()
+
+
+        # =====================================================
+        # EYES
+        # =====================================================
+
+        for x in [-W * 0.15, W * 0.15]:
+
+            glPushMatrix()
+
+            glColor4f(0.75, 0.85, 1.0, 1)
+
+            glTranslatef(
+                x,
+                -W * 0.43,
+                H * 0.60
+            )
+
+            glScalef(
+                W * 0.06,
+                W * 0.025,
+                W * 0.035
+            )
+
+            glutSolidCube(1)
+
+            glPopMatrix()
+
+        # =====================================================
+        # CAPE
+        # =====================================================
+
+        glPushMatrix()
+
+        glColor4f(0.18, 0.025, 0.025, 1)
+
+        glTranslatef(
+            0,
+            D * 0.45,
+            H * 0.00
+        )
+
+        glScalef(
+            W * 0.75,
+            D * 0.12,
+            H * 0.70
+        )
+
+        glutSolidCube(1)
+
+        glPopMatrix()
+
+
+
+        glPopMatrix()
+    
 
 class HUD:
     def __init__(self):
@@ -736,8 +1714,6 @@ class HUD:
         draw_rect(-275 - (150 - (150 * (player.health/100)))//2, 210, 150 * (player.health/100), 20, bar_color)
         
     def draw_player_shield(self):
-        if not player.armor_on:
-            return
         draw_text(-350, 180, f"Shield {int(player.shield)}/100")
         bar_color = (0.10, 0.65, 0.75)
         draw_rect(-275 - (150 - (150 * (player.shield/100)))//2, 185, 150 * (player.shield/100), 20, bar_color)
@@ -748,7 +1724,6 @@ class HUD:
         
     def draw_time(self):
         global SECONDS
-        SECONDS += dt
         s = int(SECONDS)
         m = int(s/60)
         s = int(s%60)
@@ -758,11 +1733,14 @@ class HUD:
             draw_text(261, 220, f"Time: {m}:{s}")
         
     def draw_instructions(self):
-        string = "Move = w,a,s,d | Sword = L-Click | Fire = R-Click | View = v | Slow Time = z |"
+        string = "Move = w,a,s,d | Punch = L-Click | Fire = R-Click | View = v | interact = f | Shield = z"
         draw_text(-WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2 + 10, string)
         
     def draw_life(self):
         draw_text(-WINDOW_SIZE[0]//2 + 10, WINDOW_SIZE[1]//2 - 150, f"Life: {player.life}")
+        
+    def draw_level_text(self):
+        draw_text(265, 200, f"Level: {ROOM_LEVEL}")
     
     def draw(self):
         glMatrixMode(GL_PROJECTION)
@@ -780,6 +1758,7 @@ class HUD:
         self.draw_instructions()
         self.draw_life()
         self.draw_time()
+        self.draw_level_text()
             
             
         # Restore original projection and modelview matrices
@@ -891,6 +1870,61 @@ class SKULL(STATIC_OBJECT):
 
         glPopMatrix()
 
+class BONE(STATIC_OBJECT):
+    def __init__(self, x, y, z, width, height, depth, angle, isLightSource=False):
+        super().__init__(x, y, z, width, height, depth, isLightSource)
+        self.angle = angle
+        
+    def draw(self):
+        glPushMatrix()
+
+        glTranslatef(self.x, self.y, self.z)
+        glRotatef(self.angle, 0, 0, 1)
+
+        glScalef(0.2, 0.2, 0.2)
+        # glScalef(self.width, self.depth, self.height)
+
+        glColor3f(0.78, 0.75, 0.64)
+
+        # Bone shaft
+        glPushMatrix()
+        glRotatef(90, 0, 1, 0)
+
+        quad = gluNewQuadric()
+        gluCylinder(quad, 4.5, 3.5, 50, 10, 2)
+
+        glPopMatrix()
+
+        # Left end
+        glPushMatrix()
+        glTranslatef(0, 0, 0)
+        glScalef(1.4, 1.15, 1.2)
+        glutSolidSphere(9, 10, 8)
+        glPopMatrix()
+
+        # Right end
+        glPushMatrix()
+        glTranslatef(50, 0, 0)
+        glScalef(1.5, 1.2, 1.3)
+        glutSolidSphere(10, 10, 8)
+        glPopMatrix()
+
+        # Small bump on left
+        glPushMatrix()
+        glTranslatef(5, 0, 2)
+        glScalef(1.1, 0.9, 1.0)
+        glutSolidSphere(7, 10, 8)
+        glPopMatrix()
+
+        # Small bump on right
+        glPushMatrix()
+        glTranslatef(44, 0, -2)
+        glScalef(1.1, 0.9, 1.0)
+        glutSolidSphere(7, 10, 8)
+        glPopMatrix()
+
+        glPopMatrix()
+
 class HINT_ARROW(STATIC_OBJECT):
     def __init__(self, x, y, z, width, depth, height, isLightSource=False):
         super().__init__(x, y, z, width, height, depth, isLightSource)
@@ -932,31 +1966,35 @@ class HINT_ARROW(STATIC_OBJECT):
             self.upward = not self.upward
         self.angle += 1
 
+
+
 class DOOR:
-    def __init__(self, x, y, z, width, height, required_key_name=None):
+    def __init__(self, x, y, z, angle = 0, required_key_name=None, orientaion=0, callBack=None):
         self.x = x
         self.y = y
         self.z = z
-        self.width = width
-        self.height = height
+        self.width = 50
+        self.height = 100
         self.depth = 5
         self.required_key_name = required_key_name
         self.locked = True
         if self.required_key_name is None:
             self.locked = False
         
-        self.angle = 0
+        self.angle = angle
         self.closed = True
+        self.opening_angle = 0
+        self.orientaion = orientaion
+        self.callBack = callBack
         
     def draw(self):
         glPushMatrix()
+        
         glTranslatef(self.x, self.y, self.z)
-        
-        
         glTranslatef(-self.width/2, 0, 0)
-        glRotate(self.angle, 0, 0, -1)
+        glRotate(self.opening_angle, 0, 0, -1)
+        
         glTranslatef(self.width/2, 0, 0)
-        door_color = (0.22, 0.09, 0.025)
         glColor4f(0.18, 0.17, 0.15, 1)
         glScalef(self.width, 5, self.height)
         glutSolidCube(1)
@@ -975,11 +2013,11 @@ class DOOR:
     
     def update(self):
         if self.closed:
-            if self.angle > 0:
-                self.angle -= 100 * dt
+            if self.opening_angle > 0:
+                self.opening_angle -= 100 * dt
         else:
-            if self.angle < 90:
-                self.angle += 100 * dt
+            if self.opening_angle < 90:
+                self.opening_angle += 100 * dt
         
     def keyboard_listener(self, key):
         if key == b'f' and self.closed:
@@ -987,9 +2025,14 @@ class DOOR:
             if distance < self.width:
                 if not self.locked:
                     self.closed = not self.closed
-                elif any(name==self.required_key_name for name, color in player.keys):
-                    self.locked = False
-                    self.closed = not self.closed
+                else:
+                    for name, color in player.keys:
+                        if name == self.required_key_name:
+                            self.locked = False
+                            self.closed = not self.closed
+                            player.keys.remove((self.required_key_name, color))
+                if self.callBack is not None:
+                    self.callBack()
                 
     def collision_detection(self, x, y, radius):
         if not self.closed:
@@ -1006,8 +2049,8 @@ class DOOR:
                 y - radius < max_y)
 
 class ESCAPE_DOOR(DOOR):
-    def __init__(self, x, y, z, width, height, required_key_name=None):
-        super().__init__(x, y, z, width, height, required_key_name)
+    def __init__(self, x, y, z, angle=0, required_key_name=None):
+        super().__init__(x, y, z, angle, required_key_name)
         self.over = False
         self.t = 0
         
@@ -1022,6 +2065,8 @@ class ESCAPE_DOOR(DOOR):
             else:
                 GAME_STATE = 'ESCAPED'
                 self.over = False
+
+
 
 
 # INTERACTIVE ITEMS
@@ -1074,7 +2119,6 @@ class ITEM:
     def update(self):
         self.rotation += 1
 
-
 class KEY(ITEM):
     def __init__(self, x, y, z, width, height, depth, radius, color, visible=True, active=True, callback=None, rotation=0, name="KEY_X"):
         super().__init__(x, y, z, width, height, depth, radius, color, visible, active, callback, rotation, isLightSource=True)
@@ -1114,13 +2158,13 @@ class KEY(ITEM):
         player.keys.append((self.name, self.color))
 
 class HEALTH(ITEM):
-    def __init__(self, x, y, z, width, height, depth, radius, color=(0, 1, 0, 1), visible=True, active=True, callback=None, rotation=0, isLightSource=False):
-        super().__init__(x, y, z, width, height, depth, radius, color, visible, active, callback, rotation, isLightSource)
+    def __init__(self, x, y):
+        super().__init__(x, y, 0, 10, 10, 20, 20, (0, 1, 0, 1))
         
     def draw(self):
         if not self.visible:
             return
-        r, g, b = self.color
+        r, g, b, a = self.color
         glPushMatrix()
         glTranslatef(self.x, self.y, 30)
         glRotatef(self.rotation, 0, 0, 1)
@@ -1145,6 +2189,40 @@ class HEALTH(ITEM):
         self.active = False
         if player.health + 5 <= player.max_health:
             player.health += 5
+
+class SHIELD(ITEM):
+    def __init__(self, x, y):
+        super().__init__(x, y, 0, 10, 10, 20, 20, (0, 0, 1, 1))
+        
+    def draw(self):
+        if not self.visible:
+            return
+        r, g, b, a = self.color
+        glPushMatrix()
+        glTranslatef(self.x, self.y, 30)
+        glRotatef(self.rotation, 0, 0, 1)
+        
+        glColor4f(r, g, b, a)
+        
+        glPushMatrix()
+        glScalef(self.width, self.depth, self.height*0.5)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glPushMatrix()
+        glRotatef(90, 1, 0, 0)
+        glScalef(self.width, self.depth, self.height*0.5)
+        glutSolidCube(1)
+        glPopMatrix()
+        
+        glPopMatrix()
+        
+    def callBack(self):
+        self.visible = False
+        self.active = False
+        if player.shield + 5 <= player.max_shield:
+            player.shield += 5
+
 
 # TRAPS
 class SPIKETRAP:
@@ -1185,7 +2263,7 @@ class SPIKETRAP:
     
     def update(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
-        if distance < self.width//2 + player.width//2 and player.z - player.height//2 < self.height:
+        if distance < self.width//2 + player.width//2 and player.z - player.height//2 < 10:
             player.damage(self.damage)
             theta = math.radians(player.angle)
             fx = math.sin(theta)
@@ -1231,12 +2309,14 @@ class POISONTRAP:
     
     def update(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
-        if distance < self.width//2 + player.width//2 and player.z - player.height//2 < self.height:
+        if distance < self.width//2 + player.width//2 and player.z - player.height//2 < 10:
             player.damage(self.damage)
-            # player.speed -= 20
+
+
+
 
 class ENEMY:
-    def __init__(self, x, y, z, width, depth, height, radius=30):
+    def __init__(self, x, y, z, width, depth, height, radius=30, items = []):
         self.x = x
         self.y = y
         self.z = z
@@ -1246,7 +2326,7 @@ class ENEMY:
         self.radius = radius
         
         self.speed = 0
-        self.accelaration = 500
+        self.accelaration = 10
         
         self.attack_cooldown = 0
         self.attack_cooldown_t = 0
@@ -1259,6 +2339,12 @@ class ENEMY:
         self.health = 100
         self.alive = True
         
+        self.damage = 10
+        self.damage_cooldown = 0
+        self.damage_cooldown_init = 20
+        
+        self.items = items
+        
     def draw(self):
         if self.health <= 0:
             return
@@ -1269,150 +2355,433 @@ class ENEMY:
         glRotatef(180, 0, 0, 1)
         glRotatef(self.angle, 0, 0, 1)
 
-        # =========================
-        # BODY
-        # =========================
+        # =====================================================
+        # TORSO
+        # =====================================================
         glPushMatrix()
-        glColor3f(0.15, 0.35, 0.18)       # dark green shirt
-        glScalef(self.width, self.depth, self.height * 0.65)
+        glColor3f(0.10, 0.28, 0.12)
+        glScalef(self.width * 0.95,
+                self.depth * 0.65,
+                self.height * 0.70)
         glutSolidCube(1)
         glPopMatrix()
 
-        # =========================
+        # =====================================================
+        # CHEST / SHIRT FRONT
+        # =====================================================
+        glPushMatrix()
+        glTranslatef(0, -self.depth * 0.34, self.height * 0.02)
+
+        glColor3f(0.16, 0.38, 0.18)
+        glScalef(self.width * 0.65,
+                0.05,
+                self.height * 0.48)
+        glutSolidCube(1)
+        glPopMatrix()
+
+        # =====================================================
         # HEAD
-        # =========================
+        # =====================================================
         glPushMatrix()
-        glTranslatef(0, 0, self.height * 0.48)
-        glColor3f(0.25, 0.55, 0.25)       # zombie skin
-        glScalef(self.width * 0.75,
-                self.depth * 0.9,
-                self.height * 0.35)
-        glutSolidCube(1)
+        glTranslatef(0, 0, self.height * 0.55)
+
+        glColor3f(0.30, 0.62, 0.30)
+
+        glScalef(self.width * 0.72,
+                self.depth * 0.75,
+                self.height * 0.48)
+
+        glutSolidSphere(0.5, 16, 16)
         glPopMatrix()
 
-        # =========================
+        # =====================================================
+        # LEFT EAR
+        # =====================================================
+        glPushMatrix()
+        glTranslatef(
+            -self.width * 0.38,
+            0,
+            self.height * 0.55
+        )
+
+        glColor3f(0.25, 0.52, 0.25)
+
+        glScalef(
+            self.width * 0.16,
+            self.depth * 0.30,
+            self.height * 0.18
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT EAR
+        # =====================================================
+        glPushMatrix()
+        glTranslatef(
+            self.width * 0.38,
+            0,
+            self.height * 0.55
+        )
+
+        glColor3f(0.25, 0.52, 0.25)
+
+        glScalef(
+            self.width * 0.16,
+            self.depth * 0.30,
+            self.height * 0.18
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
         # LEFT EYE
-        # =========================
+        # =====================================================
         glPushMatrix()
-        glTranslatef(-self.width * 0.22,
-                    -self.depth * 0.48,
-                    self.height * 0.55)
+        glTranslatef(
+            -self.width * 0.20,
+            -self.depth * 0.34,
+            self.height * 0.61
+        )
 
-        glColor3f(1, 0, 0)
-        glScalef(5, 3, 5)
-        glutSolidCube(1)
+        # Eye socket
+        glColor3f(0.05, 0.08, 0.04)
+
+        glScalef(
+            self.width * 0.20,
+            self.depth * 0.08,
+            self.height * 0.14
+        )
+
+        glutSolidSphere(0.5, 12, 12)
         glPopMatrix()
 
-        # =========================
+        # Red eye
+        glPushMatrix()
+        glTranslatef(
+            -self.width * 0.20,
+            -self.depth * 0.40,
+            self.height * 0.61
+        )
+
+        glColor3f(1.0, 0.02, 0.02)
+
+        glScalef(
+            self.width * 0.09,
+            self.depth * 0.04,
+            self.height * 0.07
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
         # RIGHT EYE
-        # =========================
-        glPushMatrix()
-        glTranslatef(self.width * 0.22,
-                    -self.depth * 0.48,
-                    self.height * 0.55)
-
-        glColor3f(1, 0, 0)
-        glScalef(5, 3, 5)
-        glutSolidCube(1)
-        glPopMatrix()
-
-        # =========================
-        # LEFT ARM
-        # =========================
+        # =====================================================
         glPushMatrix()
         glTranslatef(
-            -(self.width * 0.65),
-            0,
-            self.height * 0.05
+            self.width * 0.20,
+            -self.depth * 0.34,
+            self.height * 0.61
         )
 
-        glRotatef(15, 0, 1, 0)
+        glColor3f(0.05, 0.08, 0.04)
 
-        glColor3f(0.25, 0.55, 0.25)
         glScalef(
-            self.width * 0.35,
-            self.depth * 0.7,
-            self.height * 0.55
+            self.width * 0.20,
+            self.depth * 0.08,
+            self.height * 0.14
         )
-        glutSolidCube(1)
+
+        glutSolidSphere(0.5, 12, 12)
         glPopMatrix()
 
-        # =========================
-        # RIGHT ARM
-        # =========================
+        # Red eye
         glPushMatrix()
         glTranslatef(
-            self.width * 0.65,
-            0,
-            self.height * 0.05
+            self.width * 0.20,
+            -self.depth * 0.40,
+            self.height * 0.61
         )
 
-        glRotatef(-15, 0, 1, 0)
+        glColor3f(1.0, 0.02, 0.02)
 
-        glColor3f(0.25, 0.55, 0.25)
         glScalef(
-            self.width * 0.35,
-            self.depth * 0.7,
-            self.height * 0.55
+            self.width * 0.09,
+            self.depth * 0.04,
+            self.height * 0.07
         )
-        glutSolidCube(1)
+
+        glutSolidSphere(0.5, 12, 12)
         glPopMatrix()
 
-        # =========================
-        # LEFT LEG
-        # =========================
+        # =====================================================
+        # NOSE
+        # =====================================================
         glPushMatrix()
         glTranslatef(
-            -self.width * 0.22,
             0,
-            -self.height * 0.55
+            -self.depth * 0.39,
+            self.height * 0.50
         )
 
-        glColor3f(0.08, 0.12, 0.18)
+        glColor3f(0.20, 0.45, 0.20)
+
         glScalef(
-            self.width * 0.4,
-            self.depth * 0.8,
-            self.height * 0.45
+            self.width * 0.12,
+            self.depth * 0.10,
+            self.height * 0.15
         )
-        glutSolidCube(1)
+
+        glutSolidCone(0.5, 1.0, 10, 4)
         glPopMatrix()
 
-        # =========================
-        # RIGHT LEG
-        # =========================
-        glPushMatrix()
-        glTranslatef(
-            self.width * 0.22,
-            0,
-            -self.height * 0.55
-        )
-
-        glColor3f(0.08, 0.12, 0.18)
-        glScalef(
-            self.width * 0.4,
-            self.depth * 0.8,
-            self.height * 0.45
-        )
-        glutSolidCube(1)
-        glPopMatrix()
-
-        # =========================
+        # =====================================================
         # MOUTH
-        # =========================
+        # =====================================================
         glPushMatrix()
         glTranslatef(
             0,
-            -self.depth * 0.5,
-            self.height * 0.35
+            -self.depth * 0.39,
+            self.height * 0.39
         )
 
-        glColor3f(0.05, 0.02, 0.02)
+        glColor3f(0.03, 0.01, 0.01)
+
         glScalef(
-            self.width * 0.4,
-            2,
+            self.width * 0.42,
+            self.depth * 0.06,
+            self.height * 0.13
+        )
+
+        glutSolidCube(1)
+        glPopMatrix()
+
+        # =====================================================
+        # TEETH - TOP
+        # =====================================================
+        for x in [-0.13, -0.04, 0.05, 0.14]:
+            glPushMatrix()
+
+            glTranslatef(
+                self.width * x,
+                -self.depth * 0.44,
+                self.height * 0.43
+            )
+
+            glColor3f(0.85, 0.82, 0.65)
+
+            glScalef(
+                self.width * 0.06,
+                self.depth * 0.035,
+                self.height * 0.08
+            )
+
+            glutSolidCube(1)
+            glPopMatrix()
+
+        # =====================================================
+        # LEFT ARM
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.63,
+            0,
             self.height * 0.08
         )
+
+        glRotatef(-25, 0, 1, 0)
+
+        glColor3f(0.25, 0.55, 0.25)
+
+        glScalef(
+            self.width * 0.30,
+            self.depth * 0.55,
+            self.height * 0.58
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT ARM
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.63,
+            0,
+            self.height * 0.08
+        )
+
+        glRotatef(25, 0, 1, 0)
+
+        glColor3f(0.25, 0.55, 0.25)
+
+        glScalef(
+            self.width * 0.30,
+            self.depth * 0.55,
+            self.height * 0.58
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
+        # LEFT HAND
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.70,
+            0,
+            -self.height * 0.20
+        )
+
+        glColor3f(0.30, 0.65, 0.30)
+
+        glScalef(
+            self.width * 0.25,
+            self.depth * 0.40,
+            self.height * 0.18
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT HAND
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.70,
+            0,
+            -self.height * 0.20
+        )
+
+        glColor3f(0.30, 0.65, 0.30)
+
+        glScalef(
+            self.width * 0.25,
+            self.depth * 0.40,
+            self.height * 0.18
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+        glPopMatrix()
+
+        # =====================================================
+        # LEFT LEG
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.23,
+            0,
+            -self.height * 0.55
+        )
+
+        glColor3f(0.07, 0.09, 0.12)
+
+        glScalef(
+            self.width * 0.38,
+            self.depth * 0.55,
+            self.height * 0.50
+        )
+
         glutSolidCube(1)
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT LEG
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.23,
+            0,
+            -self.height * 0.55
+        )
+
+        glColor3f(0.07, 0.09, 0.12)
+
+        glScalef(
+            self.width * 0.38,
+            self.depth * 0.55,
+            self.height * 0.50
+        )
+
+        glutSolidCube(1)
+        glPopMatrix()
+
+        # =====================================================
+        # LEFT BOOT
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.23,
+            -self.depth * 0.05,
+            -self.height * 0.82
+        )
+
+        glColor3f(0.04, 0.04, 0.04)
+
+        glScalef(
+            self.width * 0.45,
+            self.depth * 0.75,
+            self.height * 0.18
+        )
+
+        glutSolidCube(1)
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT BOOT
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.23,
+            -self.depth * 0.05,
+            -self.height * 0.82
+        )
+
+        glColor3f(0.04, 0.04, 0.04)
+
+        glScalef(
+            self.width * 0.45,
+            self.depth * 0.75,
+            self.height * 0.18
+        )
+
+        glutSolidCube(1)
+        glPopMatrix()
+
+        # =====================================================
+        # HAIR
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            0,
+            0,
+            self.height * 0.78
+        )
+
+        glColor3f(0.03, 0.03, 0.03)
+
+        glScalef(
+            self.width * 0.70,
+            self.depth * 0.70,
+            self.height * 0.12
+        )
+
+        glutSolidSphere(0.5, 12, 12)
         glPopMatrix()
 
         glPopMatrix()
@@ -1455,39 +2824,12 @@ class ENEMY:
             return True
 
         return False
-            
-    def update(self):
-        if self.health <= 0:
-            r = random.random()
-            if r > 0.3:
-                item_list.append(HEALTH(self.x, self.y, 0, 10, 10, 20, 20, (1, 0, 1)))
-            self.alive = False
-            return
-        
-        move_x = True
-        move_y = True
-        collided = False
-        
-        distance = getDistance(self.x, self.y, player.x, player.y)
-        
-        if distance < 400:
-            self.detected_player = True
-        else:
-            self.detected_player = False
-        
-        if self.detected_player:
-            dx = player.x - self.x
-            dy = player.y - self.y
-            collided = self.collision_detection()
-        else:
-            dx = self.init_point[0] - self.x
-            dy = self.init_point[1] - self.y
-            
-        if collided:
-            self.attack()
-            pass
-            
-        if player.attack_on and distance < self.radius + 30:
+    
+    def get_damage(self, damage):
+        self.health -= damage
+    
+    def get_attacked(self, distance):
+        if distance < self.radius + player.radius and self.damage_cooldown <= 0:
             ptheta = math.radians(player.angle)
             pfx = math.sin(ptheta)
             pfy = -math.cos(ptheta)
@@ -1499,22 +2841,74 @@ class ENEMY:
             dot = dx * pfx + dy * pfy
             
             if abs(1 + dot) < 0.2:
-                self.health -= 10
-                self.speed -= 200
-                player.attack_on = False
+                self.get_damage(30)
+                self.speed -= 30
+                self.damage_cooldown = self.damage_cooldown_init
+    
+    def update_health(self):
+        if self.health <= 0:
+            r = random.random()
+            if r > 0.3:
+                item_list.append(random.choice([HEALTH(self.x, self.y), SHIELD(self.x, self.y)]))
+                
+            for item in self.items:
+                item.x = self.x
+                item.y = self.y
+                item.z = self.z
+                item_list.append(item)
+            self.alive = False
+            return
+    
+    def update(self):
+        move_x = True
+        move_y = True
+        collided = False
+
+
+        self.update_health()
+        if not self.alive:
+            return
+        
+        if self.damage_cooldown > 0:
+            self.damage_cooldown -= 1
+        
+        distance = getDistance(self.x, self.y, player.x, player.y)
+        
+        if distance < 400:
+            self.detected_player = True
+        else:
+            self.detected_player = False
+            
+        if collided:
+            self.attack()
+        
+        if player.attack_on:
+            self.get_attacked(distance)
+        
+        if self.detected_player:
+            dx = player.x - self.x
+            dy = player.y - self.y
+            collided = self.collision_detection()
+        else:
+            dx = self.init_point[0] - self.x
+            dy = self.init_point[1] - self.y
             
         if dx != 0:
             dx = dx/abs(dx)
         if dy != 0:
             dy = dy/abs(dy)
         
-        new_x = self.x + dx * self.speed * dt
-        new_y = self.y + dy * self.speed * dt
+        new_x = self.x + dx * self.speed
+        new_y = self.y + dy * self.speed
         
                 
         for room in room_list:
             move_x = (move_x and not room.collision_detection(new_x, self.y, 10))
             move_y = (move_y and not room.collision_detection(self.x, new_y, 10))
+            
+        for item in item_list:
+            move_x = (move_x and not item.collision_detection(new_x, self.y, 10))
+            move_y = (move_y and not item.collision_detection(self.x, new_y, 10))
         
         
         distance = getDistance(new_x, new_y, player.x, player.y)
@@ -1524,12 +2918,11 @@ class ENEMY:
                 self.x = new_x
             if move_y:
                 self.y = new_y
-            pass
         
         self.speed *= 0.5
-        self.speed += self.accelaration * dt
+        self.speed += (self.accelaration + ROOM_LEVEL*10) * dt
 
-class SKELETON(ENEMY):
+class DOG(ENEMY):
     def draw(self):
         if self.health <= 0:
             return
@@ -1540,325 +2933,612 @@ class SKELETON(ENEMY):
         glRotatef(180, 0, 0, 1)
         glRotatef(self.angle, 0, 0, 1)
 
-        bone = (0.85, 0.82, 0.70)
-        dark = (0.08, 0.08, 0.08)
-
-        # =========================
-        # TORSO
-        # =========================
-        glPushMatrix()
-        glColor3f(*bone)
-
-        glScalef(self.width * 0.55,
-                self.depth * 0.55,
-                self.height * 0.65)
-
-        glutSolidCube(1)
-        glPopMatrix()
-
-        # =========================
-        # SKULL
-        # =========================
+        # =====================================================
+        # MAIN BODY
+        # =====================================================
         glPushMatrix()
 
-        glTranslatef(0, 0, self.height * 0.55)
-
-        glColor3f(*bone)
-
-        glScalef(self.width * 0.75,
-                self.depth * 0.75,
-                self.height * 0.35)
-
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # LEFT EYE
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
-            -self.width * 0.20,
-            -self.depth * 0.40,
-            self.height * 0.60
-        )
-
-        glColor3f(*dark)
-
-        glScalef(5, 3, 5)
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # RIGHT EYE
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
-            self.width * 0.20,
-            -self.depth * 0.40,
-            self.height * 0.60
-        )
-
-        glColor3f(*dark)
-
-        glScalef(5, 3, 5)
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # MOUTH
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
-            0,
-            -self.depth * 0.40,
-            self.height * 0.42
-        )
-
-        glColor3f(*dark)
+        glColor3f(0.18, 0.08, 0.12)
 
         glScalef(
-            self.width * 0.45,
-            3,
-            self.height * 0.08
-        )
-
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # LEFT ARM
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
-            -self.width * 0.50,
-            0,
-            self.height * 0.10
-        )
-
-        glRotatef(15, 0, 1, 0)
-
-        glColor3f(*bone)
-
-        glScalef(
-            self.width * 0.18,
-            self.depth * 0.18,
-            self.height * 0.65
-        )
-
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # RIGHT ARM
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
-            self.width * 0.50,
-            0,
-            self.height * 0.10
-        )
-
-        glRotatef(-15, 0, 1, 0)
-
-        glColor3f(*bone)
-
-        glScalef(
-            self.width * 0.18,
-            self.depth * 0.18,
-            self.height * 0.65
-        )
-
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # LEFT LEG
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
-            -self.width * 0.18,
-            0,
-            -self.height * 0.45
-        )
-
-        glColor3f(*bone)
-
-        glScalef(
-            self.width * 0.18,
-            self.depth * 0.18,
+            self.width * 1.15,
+            self.depth * 0.75,
             self.height * 0.55
         )
 
-        glutSolidCube(1)
+        glutSolidSphere(0.5, 16, 16)
 
         glPopMatrix()
 
-        # =========================
-        # RIGHT LEG
-        # =========================
+        # =====================================================
+        # HEAD
+        # =====================================================
         glPushMatrix()
 
         glTranslatef(
-            self.width * 0.18,
             0,
-            -self.height * 0.45
+            -self.depth * 0.35,
+            self.height * 0.20
         )
 
-        glColor3f(*bone)
+        glColor3f(0.30, 0.12, 0.16)
 
         glScalef(
-            self.width * 0.18,
-            self.depth * 0.18,
-            self.height * 0.55
-        )
-
-        glutSolidCube(1)
-
-        glPopMatrix()
-
-        # =========================
-        # BOW
-        # =========================
-        glPushMatrix()
-
-        glTranslatef(
             self.width * 0.75,
-            -self.depth * 0.15,
-            0
+            self.depth * 0.65,
+            self.height * 0.55
         )
 
-        glRotatef(90, 0, 1, 0)
-
-        # Bow body
-        glColor3f(0.35, 0.15, 0.05)
-
-        glScalef(
-            self.height * 0.45,
-            4,
-            4
-        )
-
-        glutSolidCube(1)
+        glutSolidSphere(0.5, 16, 16)
 
         glPopMatrix()
 
-        # =========================
-        # ARROW
-        # =========================
+        # =====================================================
+        # LEFT HORN
+        # =====================================================
         glPushMatrix()
 
         glTranslatef(
-            self.width * 0.85,
-            -self.depth * 0.30,
-            0
+            -self.width * 0.32,
+            -self.depth * 0.25,
+            self.height * 0.55
         )
 
-        glColor3f(0.15, 0.15, 0.15)
+        glRotatef(-20, 0, 1, 0)
+
+        glColor3f(0.08, 0.06, 0.05)
 
         glScalef(
-            self.height * 0.55,
-            2,
-            2
+            self.width * 0.18,
+            self.depth * 0.18,
+            self.height * 0.55
         )
 
-        glutSolidCube(1)
+        glutSolidCone(0.5, 1.0, 12, 4)
+
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT HORN
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.32,
+            -self.depth * 0.25,
+            self.height * 0.55
+        )
+
+        glRotatef(20, 0, 1, 0)
+
+        glColor3f(0.08, 0.06, 0.05)
+
+        glScalef(
+            self.width * 0.18,
+            self.depth * 0.18,
+            self.height * 0.55
+        )
+
+        glutSolidCone(0.5, 1.0, 12, 4)
+
+        glPopMatrix()
+
+        # =====================================================
+        # LEFT EYE SOCKET
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.22,
+            -self.depth * 0.61,
+            self.height * 0.27
+        )
+
+        glColor3f(0.03, 0.01, 0.01)
+
+        glScalef(
+            self.width * 0.20,
+            self.depth * 0.08,
+            self.height * 0.15
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # LEFT GLOWING EYE
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.22,
+            -self.depth * 0.67,
+            self.height * 0.27
+        )
+
+        glColor3f(1.0, 0.15, 0.02)
+
+        glScalef(
+            self.width * 0.09,
+            self.depth * 0.04,
+            self.height * 0.07
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT EYE SOCKET
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.22,
+            -self.depth * 0.61,
+            self.height * 0.27
+        )
+
+        glColor3f(0.03, 0.01, 0.01)
+
+        glScalef(
+            self.width * 0.20,
+            self.depth * 0.08,
+            self.height * 0.15
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # RIGHT GLOWING EYE
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.22,
+            -self.depth * 0.67,
+            self.height * 0.27
+        )
+
+        glColor3f(1.0, 0.15, 0.02)
+
+        glScalef(
+            self.width * 0.09,
+            self.depth * 0.04,
+            self.height * 0.07
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # MOUTH
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            0,
+            -self.depth * 0.66,
+            self.height * 0.05
+        )
+
+        glColor3f(0.02, 0.01, 0.01)
+
+        glScalef(
+            self.width * 0.48,
+            self.depth * 0.08,
+            self.height * 0.18
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # TEETH
+        # =====================================================
+        for x in [-0.16, -0.08, 0.0, 0.08, 0.16]:
+
+            glPushMatrix()
+
+            glTranslatef(
+                self.width * x,
+                -self.depth * 0.71,
+                self.height * 0.09
+            )
+
+            glColor3f(0.9, 0.8, 0.55)
+
+            glScalef(
+                self.width * 0.055,
+                self.depth * 0.035,
+                self.height * 0.13
+            )
+
+            glutSolidCone(0.5, 1.0, 8, 3)
+
+            glPopMatrix()
+
+        # =====================================================
+        # FRONT LEFT LEG
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.45,
+            -self.depth * 0.25,
+            -self.height * 0.30
+        )
+
+        glRotatef(-12, 0, 1, 0)
+
+        glColor3f(0.12, 0.06, 0.08)
+
+        glScalef(
+            self.width * 0.28,
+            self.depth * 0.30,
+            self.height * 0.65
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # FRONT RIGHT LEG
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.45,
+            -self.depth * 0.25,
+            -self.height * 0.30
+        )
+
+        glRotatef(12, 0, 1, 0)
+
+        glColor3f(0.12, 0.06, 0.08)
+
+        glScalef(
+            self.width * 0.28,
+            self.depth * 0.30,
+            self.height * 0.65
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # BACK LEFT LEG
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.40,
+            self.depth * 0.25,
+            -self.height * 0.30
+        )
+
+        glRotatef(-18, 0, 1, 0)
+
+        glColor3f(0.10, 0.05, 0.07)
+
+        glScalef(
+            self.width * 0.25,
+            self.depth * 0.28,
+            self.height * 0.60
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # BACK RIGHT LEG
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.40,
+            self.depth * 0.25,
+            -self.height * 0.30
+        )
+
+        glRotatef(18, 0, 1, 0)
+
+        glColor3f(0.10, 0.05, 0.07)
+
+        glScalef(
+            self.width * 0.25,
+            self.depth * 0.28,
+            self.height * 0.60
+        )
+
+        glutSolidSphere(0.5, 12, 12)
+
+        glPopMatrix()
+
+        # =====================================================
+        # CLAW - LEFT
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            -self.width * 0.48,
+            -self.depth * 0.38,
+            -self.height * 0.58
+        )
+
+        glColor3f(0.75, 0.65, 0.45)
+
+        glScalef(
+            self.width * 0.15,
+            self.depth * 0.15,
+            self.height * 0.25
+        )
+
+        glutSolidCone(0.5, 1.0, 8, 3)
+
+        glPopMatrix()
+
+        # =====================================================
+        # CLAW - RIGHT
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            self.width * 0.48,
+            -self.depth * 0.38,
+            -self.height * 0.58
+        )
+
+        glColor3f(0.75, 0.65, 0.45)
+
+        glScalef(
+            self.width * 0.15,
+            self.depth * 0.15,
+            self.height * 0.25
+        )
+
+        glutSolidCone(0.5, 1.0, 8, 3)
+
+        glPopMatrix()
+
+        # =====================================================
+        # TAIL
+        # =====================================================
+        glPushMatrix()
+
+        glTranslatef(
+            0,
+            self.depth * 0.58,
+            self.height * 0.05
+        )
+
+        glRotatef(-35, 1, 0, 0)
+
+        glColor3f(0.16, 0.07, 0.10)
+
+        glScalef(
+            self.width * 0.18,
+            self.depth * 0.65,
+            self.height * 0.18
+        )
+
+        glutSolidCone(0.5, 1.0, 12, 4)
 
         glPopMatrix()
 
         glPopMatrix()
-    
 
+
+ROOMS = {
+    "1":{
+        "button":BUTTON(-55, 0, 50, 50, (1, 1, 1), text="1"),
+        "entities":{
+            "room_list":[
+                ROOM(0, 0, 10, 10, 50, door_at='t'),
+                TUNNEL(10, -500, 3, 10,type='lr'),
+                TUNNEL(10, -850, 3, 3,type='t'),
+                TUNNEL(310, -850, 8, 3,type='tb'),
+                TUNNEL(-390, -850, 11, 3,type='tb'),
+                TUNNEL(-790, -850, 3, 3,type='tr'),
+                TUNNEL(-790, -600, 3, 6,type='lr'),
+                TUNNEL(-790, -350, 3, 3,type='bl'),
+                TUNNEL(-1040, -350, 5, 3,type='tb'),
+                ROOM(-1440, -350, 10, 10, door_at='l'),
+                TUNNEL(610, -850, 3, 3,type='lb'),
+                ROOM(610, -1100, 3, 6, door_at='t', gap_at='b'),
+                ROOM(610, -1500, 10, 10, door_at='btl', gap_at=''),
+                TUNNEL(1360, -1500, 20, 3, type="tb"),
+                TUNNEL(1960, -1500, 3, 3, type="tl"),
+                TUNNEL(1960, -1000, 3, 15, type="lr"),
+                TUNNEL(1960, -500, 3, 3, type="lb"),
+                TUNNEL(1710, -500, 6, 3, type="tb"),
+                ROOM(1310, -540, 10, 10, door_at='l', gap_at=''),
+                TUNNEL(630, -1850, 3, 3, type="lr"),
+                TUNNEL(630, -2050, 3, 3,type='lt'),
+                TUNNEL(130, -2050, 15, 3,type='tb'),
+                TUNNEL(-370, -2050, 3, 3,type='tr'),
+                TUNNEL(-370, -1850, 3, 3,type='lr'),
+                ROOM(-370, -1600, 10, 6,door_at='tr', gap_at=''),
+                TUNNEL(-870, -1580, 10, 3,type="tb"),
+                TUNNEL(-1220, -1580, 3, 3,type="r"),
+                TUNNEL(-1220, -1230, 3, 10,type="lr"),
+                TUNNEL(-1220, -880, 3, 3,type="bl"),
+                TUNNEL(-1570, -880, 10, 3,type="tb"),
+                ROOM(-1960, -890, 6, 15,door_at='l', gap_at=''),
+                TUNNEL(-1220, -1830, 3, 6,type="lr"),
+                ROOM(-1220, -2380, 15, 15,door_at='bt', gap_at=''),
+                ],
+            "item_list":[
+                DOOR(610, -1270, 50, callBack=updateLevel, required_key_name="0x001"),
+                KEY(-1650, -380, 0, 20, 20, 20, 30, (1, 0, 0), name="0x001"),
+                
+                DOOR(-370, -1770, 50, callBack=updateLevel, required_key_name="0x002"),
+                KEY(1250, -530, 0, 20, 20, 20, 30, (1, 1, 0), name="0x002"),
+                
+                DOOR(-1220, -2010, 50, callBack=updateLevel, required_key_name="0x003"),
+                KEY(-2000, -1230, 0, 20, 20, 20, 30, (0, 1, 0), name="0x003"),
+                
+                ESCAPE_DOOR(-1220, -2800, 50, required_key_name="0x004"),
+                KEY(-940, -2720, 0, 20, 20, 20, 30, (0, 1, 0), name="0x004"),
+                
+                SHIELD(0, -200),
+                ],
+            "trap_list":[
+                SPIKETRAP(-740, -710, 0, 50, 30),
+                SPIKETRAP(-790, -710, 0, 50, 30),
+                SPIKETRAP(-840, -710, 0, 50, 30),
+                SPIKETRAP(-890, -710, 0, 50, 30)
+                ],
+            "static_item_list":[
+                SKULL(-880,-960, 10, 1, 1, 1, 120, False),
+                SKULL(-900,-960, 10, 1, 1, 1, 160, False),
+                SKULL(-730,-290, 10, 1, 1, 1, -45, False),
+                TORCH(-1690, -140, 25, 10, 50, 10),
+                TORCH(-1690, -610, 25, 10, 50, 10),
+                TORCH(-1160, -820, 25, 10, 50, 10),
+                TORCH(-170, -1500, 25, 10, 50, 10),
+                TORCH(-610, -1500, 25, 10, 50, 10),
+                TORCH(80, -2150, 25, 10, 50, 10),
+                SKULL(670, -790, 10, 1, 1, 1, -60, False),
+                SKULL(290, -790, 10, 1, 1, 1, -45, False),
+                SKULL(60, -590, 10, 1, 1, 1, 180, False),
+                BONE(60, -580, 0, 1, 1, 1, False),
+                BONE(50, -580, 0, 1, 1, 1, 45, False),
+                BONE(-890, -940, 0, 1, 1, 1, 45, False),
+                ],
+            "hint_arrow_list":[
+                HINT_ARROW(-10, -270, 150, 10, 10, 30),
+                HINT_ARROW(-10, -890, 150, 10, 10, 30),
+                HINT_ARROW(-800, -890, 150, 10, 10, 30),
+                HINT_ARROW(-800, -400, 150, 10, 10, 30),
+                HINT_ARROW(-1210, -340, 150, 10, 10, 30),
+                ],
+            "enemy_list":[
+                ENEMY(-1470, -530, 50, 30, 10, 50),
+                ENEMY(-1470, -190, 50, 30, 10, 50),
+                ENEMY(1110, -720, 50, 30, 10, 50),
+                ENEMY(1110, -380, 50, 30, 10, 50),
+                ENEMY(1320, -700, 50, 30, 10, 50),
+                ENEMY(1320, -380, 50, 30, 10, 50),
+                DOG(800, -1500, 50, 30, 10, 50),
+                DOG(610, -1730, 50, 30, 10, 50),
+                ENEMY(-1940, -950, 50, 30, 10, 50),
+                ENEMY(-2060, -600, 50, 30, 10, 50),
+                ENEMY(-0, -100, 50, 30, 10, 50),
+                ],
+        }
+    },
+    "2":{
+        "button":BUTTON(0, 0, 50, 50, (1, 1, 1), text="2"),
+        "entities":{
+            "room_list":[
+                ROOM(0, 0, 10, 10, 50, door_at='t'),
+                TUNNEL(10, -500, 3, 10,type='lr'),
+                TUNNEL(10, -850, 3, 3,type='t'),
+                TUNNEL(310, -850, 8, 3,type='tb'),
+                TUNNEL(-390, -850, 11, 3,type='tb'),
+                TUNNEL(-790, -850, 3, 3,type='tr'),
+                TUNNEL(-790, -600, 3, 6,type='lr'),
+                TUNNEL(-790, -350, 3, 3,type='bl'),
+                TUNNEL(-1040, -350, 5, 3,type='tb'),
+                ROOM(-1440, -350, 10, 10, door_at='l'),
+                TUNNEL(610, -850, 3, 3,type='lb'),
+                ROOM(610, -1100, 3, 6, door_at='t', gap_at='b'),
+                ROOM(610, -1500, 10, 10, door_at='btl', gap_at=''),
+                TUNNEL(1360, -1500, 20, 3, type="tb"),
+                TUNNEL(1960, -1500, 3, 3, type="tl"),
+                TUNNEL(1960, -1000, 3, 15, type="lr"),
+                TUNNEL(1960, -500, 3, 3, type="lb"),
+                TUNNEL(1710, -500, 6, 3, type="tb"),
+                ROOM(1310, -540, 10, 10, door_at='l', gap_at=''),
+                TUNNEL(630, -1850, 3, 3, type="lr"),
+                TUNNEL(630, -2050, 3, 3,type='lt'),
+                TUNNEL(130, -2050, 15, 3,type='tb'),
+                TUNNEL(-370, -2050, 3, 3,type='tr'),
+                TUNNEL(-370, -1850, 3, 3,type='lr'),
+                ROOM(-370, -1600, 10, 6,door_at='tr', gap_at=''),
+                TUNNEL(-870, -1580, 10, 3,type="tb"),
+                TUNNEL(-1220, -1580, 3, 3,type="r"),
+                TUNNEL(-1220, -1230, 3, 10,type="lr"),
+                TUNNEL(-1220, -880, 3, 3,type="bl"),
+                TUNNEL(-1570, -880, 10, 3,type="tb"),
+                ROOM(-1960, -890, 6, 15,door_at='l', gap_at=''),
+                TUNNEL(-1220, -1830, 3, 6,type="lr"),
+                ROOM(-1220, -2380, 15, 15,door_at='bt', gap_at=''),
+                ],
+            "item_list":[
+                DOOR(610, -1270, 50, callBack=updateLevel, required_key_name="0x001"),
+                KEY(-1650, -380, 0, 20, 20, 20, 30, (1, 0, 0), name="0x001"),
+                
+                DOOR(-370, -1770, 50, callBack=updateLevel, required_key_name="0x002"),
+                KEY(1250, -530, 0, 20, 20, 20, 30, (1, 1, 0), name="0x002"),
+                
+                DOOR(-1220, -2010, 50, callBack=updateLevel, required_key_name="0x003"),
+                KEY(-2000, -1230, 0, 20, 20, 20, 30, (0, 1, 0), name="0x003"),
+                
+                ESCAPE_DOOR(-1220, -2800, 50, required_key_name="0x004"),
+                KEY(-940, -2720, 0, 20, 20, 20, 30, (0, 1, 0), name="0x004"),
+                
+                HEALTH(0, -200),
+                ],
+            "trap_list":[
+                SPIKETRAP(-740, -710, 0, 50, 30),
+                SPIKETRAP(-790, -710, 0, 50, 30),
+                SPIKETRAP(-840, -710, 0, 50, 30),
+                SPIKETRAP(-890, -710, 0, 50, 30)
+                ],
+            "static_item_list":[
+                SKULL(-880,-960, 10, 1, 1, 1, 120, False),
+                SKULL(-900,-960, 10, 1, 1, 1, 160, False),
+                SKULL(-730,-290, 10, 1, 1, 1, -45, False),
+                TORCH(-1690, -140, 25, 10, 50, 10),
+                TORCH(-1690, -610, 25, 10, 50, 10),
+                TORCH(-1160, -820, 25, 10, 50, 10),
+                TORCH(-170, -1500, 25, 10, 50, 10),
+                TORCH(-610, -1500, 25, 10, 50, 10),
+                TORCH(80, -2150, 25, 10, 50, 10),
+                SKULL(670, -790, 10, 1, 1, 1, -60, False),
+                SKULL(290, -790, 10, 1, 1, 1, -45, False),
+                SKULL(60, -590, 10, 1, 1, 1, 180, False),
+                BONE(60, -580, 0, 1, 1, 1, False),
+                BONE(50, -580, 0, 1, 1, 1, 45, False),
+                BONE(-890, -940, 0, 1, 1, 1, 45, False),
+                ],
+            "hint_arrow_list":[
+                HINT_ARROW(-10, -270, 150, 10, 10, 30),
+                HINT_ARROW(-10, -890, 150, 10, 10, 30),
+                HINT_ARROW(-800, -890, 150, 10, 10, 30),
+                HINT_ARROW(-800, -400, 150, 10, 10, 30),
+                HINT_ARROW(-1210, -340, 150, 10, 10, 30),
+                ],
+            "enemy_list":[
+                ENEMY(-1470, -530, 50, 30, 10, 50),
+                ENEMY(-1470, -190, 50, 30, 10, 50),
+                ENEMY(1110, -720, 50, 30, 10, 50),
+                ENEMY(1110, -380, 50, 30, 10, 50),
+                ENEMY(1320, -700, 50, 30, 10, 50),
+                ENEMY(1320, -380, 50, 30, 10, 50),
+                DOG(800, -1500, 50, 30, 10, 50),
+                DOG(610, -1730, 50, 30, 10, 50),
+                ENEMY(-1940, -950, 50, 30, 10, 50),
+                ENEMY(-2060, -600, 50, 30, 10, 50)
+                ],
+        }
+    },
+}
 
 # glutSolidCube(30)
 # gluSphere(gluNewQuadric(), 20, 10, 10)
 # gluCylinder(gluNewQuadric(), 8, 3, 30, 10, 10)
 # draw_text(10, 730, f"Player Bullet Missed: {player.missed}")
-
-def convert_coordinate(x, y):
-    """
-    Converts mouse (screen) coordinates to OpenGL (Cartesian) coordinates.
-    Top-left of the window is (0,0) in screen space,
-    but OpenGL center is (0,0).
-    """
-    a = x - (WINDOW_SIZE[0] / 2)
-    b = (WINDOW_SIZE[1] / 2) - y
-    return a, b
-
-def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18, color=(1,1,1)):
-    r, g, b = color
-    glColor4f(r, g, b, 1)
-    glMatrixMode(GL_PROJECTION)
-    glPushMatrix()
-    glLoadIdentity()
-    
-    # Set up an orthographic projection that matches window coordinates
-    # gluOrtho2D(0, 1000, 0, 800)  # left, right, bottom, top
-    gluOrtho2D(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2)
-
-    
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
-    
-    # Draw text at (x, y) in screen coordinates
-    glRasterPos2f(x, y)
-    for ch in text:
-        glutBitmapCharacter(font, ord(ch))
-    
-    # Restore original projection and modelview matrices
-    glPopMatrix()
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
-
-def draw_point(size, x, y, z, color=(1,1,1,1)):
-    r, g, b, a = color
-    glColor4f(r, g, b, 1)
-    glPointSize(size)
-    glBegin(GL_POINTS)
-    glVertex3f(x, y, z)
-    glEnd()
-    
-def draw_rect(x, y, width, height, color=(1,1,1), color1=None, color2=None,color3=None):
-    if color1 is None:
-        color1 = color
-        
-    if color2 is None:
-        color2 = color
-        
-    if color3 is None:
-        color3 = color
-        
-    r, g, b = color
-    r1, g1, b1 = color1
-    r2, g2, b2 = color2
-    r3, g3, b3 = color3
-    glBegin(GL_QUADS)
-    
-    glColor4f(r, g, b, 1)
-    glVertex3f(x+width//2, y-height//2, 0)
-    
-    glColor4f(r1, g1, b1, 1)
-    glVertex3f(x-width//2, y-height//2, 0)
-    
-    glColor4f(r2, g2, b2, 1)
-    glVertex3f(x-width//2, y+height//2, 0)
-    
-    glColor4f(r3, g3, b3, 1)
-    glVertex3f(x+width//2, y+height//2, 0)
-    glEnd()
 
 # DEBUGING
 class DEBUG:
@@ -1912,8 +3592,9 @@ def keyboardListener(key, x, y):
             CHEAT_MODE = not CHEAT_MODE
             
         if key == b' ':
-            print(room_to_move.x, room_to_move.y)
+            # print(room_to_move.x, room_to_move.y)
             # print(debug.text_x, debug.text_y)
+            print(camera.target_up) # max = 45, min = -25
             player.jump()
             pass
             
@@ -1926,14 +3607,6 @@ def keyboardListener(key, x, y):
     if key == b'\x1b':
         # GAME_STATE = "MENU"
         glutLeaveMainLoop()
-
-# SHOULD BE REMOVED
-def keyboardUpListener(key, x, y):
-    global KEY_W, KEY_S
-    if key == b'w':
-        KEY_W = False
-    if key == b's':
-        KEY_S = False
 
 def specialKeyListener(key, x, y):
     # print(key)
@@ -1952,8 +3625,13 @@ def specialKeyListener(key, x, y):
     # moving camera right (RIGHT arrow key)
     if key == GLUT_KEY_RIGHT:
         pass
+    
+    if key == 112:
+        player.sprint = not player.sprint
 
 def mouseListener(button, state, x, y):
+    global GAME_STATE
+    
     x, y = convert_coordinate(x, y)
     
     if GAME_STATE == "MENU":
@@ -1961,6 +3639,13 @@ def mouseListener(button, state, x, y):
             start_button.click(x, y, start_button_callback)
             help_button.click(x,y,help_button_callback)
             exit_button.click(x,y, glutLeaveMainLoop)
+
+    elif GAME_STATE == "ROOM SELECT":
+        if button == GLUT_LEFT_BUTTON and state == GLUT_UP:
+            for i in ROOMS:
+                button = ROOMS[i]["button"]
+                GAME_STATE = "GAME"
+                button.click(x, y, game_init, i)
             
     elif GAME_STATE == "HELP":
         if button == GLUT_LEFT_BUTTON and state == GLUT_UP:
@@ -1969,6 +3654,8 @@ def mouseListener(button, state, x, y):
     elif GAME_STATE == "GAME":
         if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
             player.attack()
+        if button == GLUT_RIGHT_BUTTON and state == GLUT_DOWN:
+            player.fire()
         if button == 3:
             camera.target_up += 1
         if button == 4:
@@ -1982,21 +3669,15 @@ def mouseListener(button, state, x, y):
         if button == GLUT_LEFT_BUTTON and state == GLUT_UP:
             main_menu_button.click(x, y, main_menu_button_callback)
 
-import time
-last_time = time.time()
-FPS = 60
-target_time = 1/FPS
-dt = 1
-
 def idle(value=0):
-    global last_time, dt
+    global last_time, dt, SECONDS
     
     current_time = time.time()
     dt = current_time - last_time
-    if dt < 1/FPS:
-        return
-    dt = target_time
+    if GAME_STATE == "GAME":
+        SECONDS += dt
     last_time = current_time
+    dt = min(dt, 1/60)
     
     if GAME_STATE == 'GAME':
         player.update()
@@ -2004,24 +3685,38 @@ def idle(value=0):
         hud.update()
         
         for item in item_list:
-            item.update()
+            distance = getDistance(item.x, item.y, player.x, player.y)
+            if distance < DRAWING_RADIUS:
+                item.update()
             
         for item in static_item_list:
-            item.update()
+            distance = getDistance(item.x, item.y, player.x, player.y)
+            if distance < DRAWING_RADIUS:
+                item.update()
             
         for arrow in hint_arrow_list:
-            arrow.update()
+            distance = getDistance(arrow.x, arrow.y, player.x, player.y)
+            if distance < DRAWING_RADIUS:
+                arrow.update()
             
         for trap in trap_list:
-            trap.update()
+            distance = getDistance(trap.x, trap.y, player.x, player.y)
+            if distance < DRAWING_RADIUS:
+                trap.update()
             
         for enemy in enemy_list:
-            if enemy.alive:
-                enemy.update()
-            else:
-                enemy_list.remove(enemy)
+            distance = getDistance(enemy.x, enemy.y, player.x, player.y)
+            if distance < DRAWING_RADIUS:
+                if enemy.alive:
+                    enemy.update()
+                else:
+                    enemy_list.remove(enemy)
+                
+    elif GAME_STATE == "PLAYER_SELECTION":
+        pass
         
     glutPostRedisplay()
+    
 
 def setupCamera():
     """
@@ -2056,8 +3751,7 @@ def setup_projection():
 start_button = BUTTON(0, 100, 500, 50, text="START")
 def start_button_callback():
     global GAME_STATE
-    GAME_STATE = "GAME"
-    game_init()
+    GAME_STATE = "ROOM SELECT"
 help_button =  BUTTON(0, 40, 500, 50, text="HELP")
 def help_button_callback():
     global GAME_STATE
@@ -2086,67 +3780,23 @@ room_to_move = None
 player = None
 hud = None
 
-def game_init():
+def game_init(room_no):
     global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list, hint_arrow_list
     
-    player = Player(0, 0)
+    player = PLAYER(0, 0)
+    player = WARRIOR(0, 0)
     hud = HUD()
     
-    room_list = [
-        ROOM(0, 0, 10, 10, 50, door_at='t'),
-        TUNNEL(10, -500, 3, 10,type='lr'),
-        TUNNEL(10, -850, 3, 3,type='t'),
-        TUNNEL(310, -850, 8, 3,type='tb'),
-        TUNNEL(-390, -850, 11, 3,type='tb'),
-        TUNNEL(-790, -850, 3, 3,type='tr'),
-        TUNNEL(-790, -600, 3, 6,type='lr'),
-        TUNNEL(-790, -350, 3, 3,type='bl'),
-        TUNNEL(-1040, -350, 5, 3,type='tb'),
-        ROOM(-1440, -350, 10, 10, door_at='l'),
-        TUNNEL(610, -850, 3, 3,type='lb'),
-        ROOM(610, -1100, 3, 6, door_at='t', gap_at='b'),
-        ROOM(610, -1400, 3, 6, door_at='b', gap_at=''),
-    ]
-    
-    item_list = [
-        KEY(-1440, -350, 0, 20, 20, 20, 20, (1, 0, 0), name="0x0001"),
-        ESCAPE_DOOR(610, -1270, 50, 50, 100, required_key_name="0x0001"),
-    ]
-    
-    trap_list = [
-        SPIKETRAP(-740, -710, 0, 50, 30),
-        SPIKETRAP(-790, -710, 0, 50, 30),
-        SPIKETRAP(-840, -710, 0, 50, 30),
-        SPIKETRAP(-890, -710, 0, 50, 30)
-    ]
-    
-    static_item_list = [
-        SKULL(-900, -960, 10, 1, 1, 1, 90 + 45, False),
-        TORCH(-1690, -140, 25, 10, 50, 10),
-        TORCH(-1690, -610, 25, 10, 50, 10),
-        TORCH(40, -250, 25, 10, 50, 10),
-        TORCH(-50, -250, 25, 10, 50, 10),
-    ]
-    
-    hint_arrow_list = [
-        HINT_ARROW(-10, -270, 150, 10, 10, 30),
-        HINT_ARROW(-10, -890, 150, 10, 10, 30),
-        HINT_ARROW(-800, -890, 150, 10, 10, 30),
-        HINT_ARROW(-800, -400, 150, 10, 10, 30),
-        HINT_ARROW(-1210, -340, 150, 10, 10, 30),
-    ]
-    
-    enemy_list = [
-        ENEMY(-1660, -530, 80, 30, 10, 80),
-        ENEMY(-1660, -220, 80, 30, 10, 80),
-        ENEMY(0, -100, 50, 30, 10, 50),
-    ]
-
-    room_to_move = enemy_list[-1]
-    # room_list.append(room_to_move)
-
-game_init()
+    entities = ROOMS[room_no]["entities"]
+    room_list = entities["room_list"]
+    item_list = entities["item_list"]
+    trap_list = entities["trap_list"]
+    static_item_list = entities['static_item_list']
+    hint_arrow_list = entities['hint_arrow_list']
+    enemy_list = entities['enemy_list']
  
+
+# Drawing Function
 def draw_menu():
     glColor4f(1, 0, 0, 1)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
@@ -2163,10 +3813,6 @@ def draw_help():
     
     draw_text(0, WINDOW_SIZE[1]//2 - 100, "HELP", font=GLUT_BITMAP_TIMES_ROMAN_24)
     help_back_button.draw()
-
-def getDistance(obj1_x, obj1_y, obj2_x, obj2_y):
-    distance = math.sqrt((obj1_x - obj2_x)**2 + (obj1_y - obj2_y)**2)
-    return distance
 
 def draw_game():
     for room in room_list:
@@ -2199,16 +3845,15 @@ def draw_game():
         
     player.draw()
     hud.draw()
+    camera.draw()
 
 def draw_escaped():
-    global BEST_SECONDS, SECONDS
-    if SECONDS < BEST_SECONDS or BEST_SECONDS is None:
-        BEST_SECONDS = SECONDS
+    global SECONDS
     glColor4f(1, 0, 0, 1)
     draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
     
     end_quote = "A NEW LIFE BEGINS"
-    draw_text(-6*len(end_quote), 120, end_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
+    draw_text(-6*len(end_quote), 140, end_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
     s = int(SECONDS)
     m = int(s/60)
     s = int(s%60)
@@ -2216,7 +3861,7 @@ def draw_escaped():
         time_quote = f"Time: {m}:0{s}"
     else:
         time_quote = f"Time: {m}:{s}"
-    draw_text(-6*len(time_quote), 90, time_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
+    draw_text(-6*len(time_quote), 110, time_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
     main_menu_button.draw()
     
 def draw_game_over():
@@ -2226,7 +3871,14 @@ def draw_game_over():
     end_quote = "GAME OVER!"
     draw_text(-6*len(end_quote), 100, end_quote, font=GLUT_BITMAP_TIMES_ROMAN_24)
     main_menu_button.draw()
-    game_init()
+    
+def draw_room_select():
+    glColor4f(1, 0, 0, 1)
+    draw_rect(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1], color=(0,0,0.8), color1=(0,0,0.8), color2=(0,0,0), color3=(0,0,0))
+    draw_text(-100, WINDOW_SIZE[1]//2 - 100, "SELECT ROOM", font=GLUT_BITMAP_TIMES_ROMAN_24)
+    
+    for i in ROOMS:
+        ROOMS[i]['button'].draw()
 
 def showScreen():
     """
@@ -2247,6 +3899,10 @@ def showScreen():
         glDisable(GL_DEPTH_TEST)
         setup_projection()
         draw_help()
+    elif GAME_STATE == "ROOM SELECT":
+        glDisable(GL_DEPTH_TEST)
+        setup_projection()
+        draw_room_select()
     elif GAME_STATE == "GAME":
         glEnable(GL_DEPTH_TEST)
         setupCamera()
