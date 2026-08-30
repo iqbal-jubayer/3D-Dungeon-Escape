@@ -477,7 +477,7 @@ class BULLET:
             distance = getDistance(self.x, self.y, player.x, player.y)
             if distance <= player.radius:
                 self.active = False
-                player.damage(self.owner.damage)
+                player.get_damage(self.owner.damage)
                 
         
         for room in room_list:
@@ -614,8 +614,10 @@ class PLAYER:
         for bullet in self.bullets:
             bullet.draw()
     
-    def damage(self, point):
+    def get_damage(self, point):
         if self.damage_cooldown > 0:
+            return
+        if CHEAT_MODE:
             return
         if self.shield_on:
             new_sheild = self.shield - point*1.5
@@ -735,16 +737,10 @@ class PLAYER:
         self.update_bullet()
 
 class ADVENTURER(PLAYER):
-
-    # Shared quadric — created only once
     quadric = gluNewQuadric()
 
     def __init__(self, x, y):
         super().__init__(x, y)
-
-    # =========================================================
-    # SIMPLE CUBE
-    # =========================================================
 
     def cube(self, color, x, y, z, sx, sy, sz):
 
@@ -758,10 +754,6 @@ class ADVENTURER(PLAYER):
         glutSolidCube(1)
 
         glPopMatrix()
-
-    # =========================================================
-    # SIMPLE SPHERE
-    # =========================================================
 
     def sphere(self, color, x, y, z, sx, sy, sz):
 
@@ -779,10 +771,6 @@ class ADVENTURER(PLAYER):
             8)
 
         glPopMatrix()
-
-    # =========================================================
-    # LEG
-    # =========================================================
 
     def draw_leg(self, side):
 
@@ -831,10 +819,6 @@ class ADVENTURER(PLAYER):
         )
 
         glPopMatrix()
-
-    # =========================================================
-    # ARM
-    # =========================================================
 
     def draw_arm(self, side):
 
@@ -893,10 +877,6 @@ class ADVENTURER(PLAYER):
 
         glPopMatrix()
 
-    # =========================================================
-    # BODY
-    # =========================================================
-
     def draw_body(self):
 
         W = self.width
@@ -945,10 +925,6 @@ class ADVENTURER(PLAYER):
             D * 0.04,
             H * 0.12
         )
-
-    # =========================================================
-    # HEAD
-    # =========================================================
 
     def draw_head(self):
 
@@ -1010,10 +986,6 @@ class ADVENTURER(PLAYER):
                 W * 0.055
             )
 
-    # =========================================================
-    # CAPE
-    # =========================================================
-
     def draw_cape(self):
 
         W = self.width
@@ -1038,24 +1010,11 @@ class ADVENTURER(PLAYER):
             H * 0.65
         )
 
-    # =========================================================
-    # MAIN DRAW
-    # =========================================================
-
     def draw_player(self):
 
         glPushMatrix()
-
-        glTranslatef(
-            self.x,
-            self.y,
-            self.z
-        )
-
-        glRotatef(
-            self.angle,
-            0, 0, 1
-        )
+        glTranslatef(self.x, self.y, self.z)
+        glRotatef(self.angle, 0, 0, 1)
 
         # Body
         self.draw_body()
@@ -1075,8 +1034,6 @@ class ADVENTURER(PLAYER):
         self.draw_cape()
 
         glPopMatrix()    
-
-
 
 class HUD:
     def __init__(self):
@@ -1187,6 +1144,8 @@ class STATIC_OBJECT:
         pass
     
 class TORCH(STATIC_OBJECT):
+    quadric = gluNewQuadric()
+    
     def __init__(self, x, y, z, width, height, depth):
         super().__init__(x, y, z, width, height, depth, isLightSource=True)
 
@@ -1194,9 +1153,7 @@ class TORCH(STATIC_OBJECT):
         glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
 
-        # =====================================================
         # WOODEN HANDLE
-        # =====================================================
         glColor4f(0.25, 0.10, 0.03, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.30)
@@ -1204,9 +1161,7 @@ class TORCH(STATIC_OBJECT):
         glutSolidCube(30)
         glPopMatrix()
 
-        # =====================================================
         # METAL HOLDER
-        # =====================================================
         glColor4f(0.15, 0.15, 0.15, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.58)
@@ -1214,48 +1169,42 @@ class TORCH(STATIC_OBJECT):
         glutSolidCube(30)
         glPopMatrix()
 
-        # =====================================================
         # OUTER FLAME
-        # =====================================================
         glColor4f(1.0, 0.18, 0.01, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.75)
         glScalef(self.width / 20 * 0.75, self.depth / 20 * 0.75, self.height / 20 * 0.25)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # MIDDLE FLAME
-        # =====================================================
         glColor4f(1.0, 0.50, 0.02, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.82)
         glScalef(self.width / 20 * 0.50, self.depth / 20 * 0.50, self.height / 20 * 0.20)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # INNER FLAME
-        # =====================================================
         glColor4f(1.0, 0.90, 0.10, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.80)
         glScalef(self.width / 20 * 0.30, self.depth / 20 * 0.30, self.height / 20 * 0.14)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # FLAME TIP
-        # =====================================================
         glColor4f(1.0, 0.30, 0.01, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.96)
         glScalef(self.width / 30 * 0.35, self.depth / 30 * 0.35, self.height / 30 * 0.25)
-        gluCylinder(gluNewQuadric(), 8, 3, 30, 10, 10)
+        gluCylinder(self.quadric, 8, 3, 30, 10, 10)
         glPopMatrix()
         glPopMatrix()
 
 class SKULL(STATIC_OBJECT):
+    quadric = gluNewQuadric()
+    
     def __init__(self, x, y, z, width, height, depth, angle, isLightSource=False):
         super().__init__(x, y, z, width, height, depth, isLightSource)
         self.angle = angle
@@ -1268,92 +1217,56 @@ class SKULL(STATIC_OBJECT):
 
         glColor3f(0.78, 0.75, 0.64)
 
-        # =====================================================
         # MAIN CRANIUM
-        # =====================================================
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.12)
         glScalef(self.width / 40, self.depth / 40, self.height / 42)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
-        # FACE / LOWER SKULL
-        # =====================================================
+        # LOWER SKULL
         glPushMatrix()
         glTranslatef(0, -self.depth * 0.18, -self.height * 0.12)
         glScalef(self.width / 50, self.depth / 45, self.height / 65)
         glutSolidCube(30)
         glPopMatrix()
 
-        # =====================================================
         # LEFT CHEEK
-        # =====================================================
         glPushMatrix()
         glTranslatef(-self.width * 0.32, -self.depth * 0.25, -self.height * 0.08)
         glScalef(self.width / 100, self.depth / 75, self.height / 100)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # RIGHT CHEEK
-        # =====================================================
         glPushMatrix()
         glTranslatef(self.width * 0.32, -self.depth * 0.25, -self.height * 0.08)
         glScalef(self.width / 100, self.depth / 75, self.height / 100)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # LEFT EYE SOCKET
-        # =====================================================
         glColor3f(0.02, 0.02, 0.02)
         glPushMatrix()
         glTranslatef(-self.width * 0.23, -self.depth * 0.43, self.height * 0.12)
         glScalef(self.width / 90, self.depth / 80, self.height / 90)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # RIGHT EYE SOCKET
-        # =====================================================
         glPushMatrix()
         glTranslatef(self.width * 0.23, -self.depth * 0.43, self.height * 0.12)
         glScalef(self.width / 90, self.depth / 80, self.height / 90)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # NOSE HOLE
-        # =====================================================
         glColor3f(0.02, 0.02, 0.02)
         glPushMatrix()
         glTranslatef(0, -self.depth * 0.47, -self.height * 0.08)
         glScalef(self.width / 120, self.depth / 100, self.height / 100)
-        gluSphere(gluNewQuadric(), 20, 10, 10)
+        gluSphere(self.quadric, 20, 10, 10)
         glPopMatrix()
-
-        # =====================================================
-        # JAW
-        # =====================================================
-        glColor3f(0.70, 0.67, 0.56)
-        glPushMatrix()
-        glTranslatef(0, -self.depth * 0.25, -self.height * 0.30)
-        glScalef(self.width / 55, self.depth / 55, self.height / 90)
-        glutSolidCube(30)
-        glPopMatrix()
-
-        # =====================================================
-        # TEETH
-        # =====================================================
-        glColor3f(0.90, 0.87, 0.74)
-        for i in range(5):
-            x = (i - 2) * self.width * 0.12
-            glPushMatrix()
-            glTranslatef(x,-self.depth * 0.48,-self.height * 0.24)
-            glScalef(self.width / 180,self.depth / 110,self.height / 130)
-            glutSolidCube(30)
-            glPopMatrix()
 
         glPopMatrix()
 
@@ -1370,46 +1283,36 @@ class BONE(STATIC_OBJECT):
 
         glColor3f(0.78, 0.75, 0.64)
 
-        # =====================================================
         # SHAFT
-        # =====================================================
         glPushMatrix()
         glTranslatef(-self.width * 0.35, 0, 0)
         glRotatef(90, 0, 1, 0)
         glScalef(self.depth / 30, self.depth / 30, self.width / 30)
         gluCylinder(gluNewQuadric(), 8, 3, 30, 10, 10)
         glPopMatrix()
-
-        # =====================================================
+        
         # LEFT END
-        # =====================================================
         glPushMatrix()
         glTranslatef(-self.width * 0.50, 0, 0)
         glScalef(self.depth / 40, self.depth / 40, self.depth / 40)
         gluSphere(gluNewQuadric(), 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # RIGHT END
-        # =====================================================
         glPushMatrix()
         glTranslatef(self.width * 0.50, 0, 0)
         glScalef(self.depth / 38, self.depth / 38, self.depth / 38)
         gluSphere(gluNewQuadric(), 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # LEFT SMALL BUMP
-        # =====================================================
         glPushMatrix()
         glTranslatef(-self.width * 0.38, 0, self.depth * 0.12)
         glScalef(self.depth / 55, self.depth / 55, self.depth / 55)
         gluSphere(gluNewQuadric(), 20, 10, 10)
         glPopMatrix()
 
-        # =====================================================
         # RIGHT SMALL BUMP
-        # =====================================================
         glPushMatrix()
         glTranslatef(self.width * 0.38, 0, -self.depth * 0.12)
         glScalef(self.depth / 55, self.depth / 55, self.depth / 55)
@@ -1525,11 +1428,15 @@ class DOOR:
                 if not self.locked:
                     self.closed = not self.closed
                 else:
-                    for name, color in player.keys:
-                        if name == self.required_key_name:
-                            self.locked = False
-                            self.closed = not self.closed
-                            player.keys.remove((self.required_key_name, color))
+                    if CHEAT_MODE:
+                        self.locked = False
+                        self.closed = not self.closed
+                    else:
+                        for name, color in player.keys:
+                            if name == self.required_key_name:
+                                self.locked = False
+                                self.closed = not self.closed
+                                player.keys.remove((self.required_key_name, color))
                 if self.callBack is not None:
                     self.callBack()
                 
@@ -1764,7 +1671,7 @@ class SPIKETRAP:
     def update(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
         if distance < self.width//2 + player.width//2 and player.z - player.height//2 < 10:
-            player.damage(self.damage)
+            player.get_damage(self.damage)
             theta = math.radians(player.angle)
             fx = math.sin(theta)
             fy = -math.cos(theta)
@@ -1810,7 +1717,7 @@ class POISONTRAP:
     def update(self):
         distance = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
         if distance < self.width//2 + player.width//2 and player.z - player.height//2 < 10:
-            player.damage(self.damage)
+            player.get_damage(self.damage)
 
 
 # ENEMY
@@ -1882,7 +1789,7 @@ class ENEMY:
     
     def attack(self):
         if self.attack_cooldown <= 0:
-            player.damage(self.damage)
+            player.get_damage(self.damage)
             
             player.speed -= 10
             
@@ -3384,8 +3291,6 @@ ROOMS = {
                 
                 ESCAPE_DOOR(-1220, -2800, 50, required_key_name="0x004"),
                 KEY(-940, -2720, (0, 1, 0), name="0x004"),
-                
-                SHIELD(0, -200),
                 ],
             "trap_list":[
                 SPIKETRAP(-740, -710, 0, 50, 30),
