@@ -30,8 +30,7 @@ dt = 1
 #   - ROOM SELECT
 #   - GAME
 #   - ESCAPED
-#   - PLAYER_SELECTION
-GAME_STATE = "MENU"
+GAME_STATE = "GAME"
 ROOM_LEVEL = 1
 DRAWING_RADIUS = 1000
 
@@ -296,24 +295,28 @@ class AREA:
             self.width += 1
         if self.length % 2 != 0:
             self.length += 1
+        
+        self.max_lightness = 1.5
+        self.lightness = 0
+        self.l_dir = 1
             
-    def floor_light_up(self, rect_x, rect_y, obj_x, obj_y, color):
+    def floor_light_up(self, rect_x, rect_y, obj_x, obj_y, color, lightness, max_lightness):
         r, g, b, a = color
         distance = math.sqrt((rect_x + self.x - obj_x)**2 + (rect_y + self.y - obj_y)**2)
         if distance < 75:
-            r += 0.15
-            g += 0.10
-            b += 0.04
+            r += 0.15 + 0.15*lightness/max_lightness
+            g += 0.10 + 0.10*lightness/max_lightness
+            b += 0.04 + 0.04*lightness/max_lightness
 
         elif distance < 150:
-            r += 0.08
-            g += 0.05
-            b += 0.02
+            r += 0.08 + 0.08*lightness/max_lightness
+            g += 0.05 + 0.05*lightness/max_lightness
+            b += 0.02 + 0.02*lightness/max_lightness
 
         elif distance < 250:
-            r += 0.03
-            g += 0.02
-            b += 0.01
+            r += 0.03 + 0.03*lightness/max_lightness
+            g += 0.02 + 0.02*lightness/max_lightness
+            b += 0.01 + 0.01*lightness/max_lightness
         return r, g, b, a
         
     def draw_floor(self):
@@ -327,12 +330,12 @@ class AREA:
                 if distance > DRAWING_RADIUS:
                     continue
                 
-                r, g, b, a = self.floor_light_up(rect_x, rect_y, player.x, player.y, (r, g, b, a))
+                r, g, b, a = self.floor_light_up(rect_x, rect_y, player.x, player.y, (r, g, b, a), self.lightness, self.max_lightness)
                     
                 for item in static_item_list:
                     if not item.isLightSource:
                         continue
-                    r, g, b, a = self.floor_light_up(rect_x, rect_y, item.x, item.y, (r, g, b, a))
+                    r, g, b, a = self.floor_light_up(rect_x, rect_y, item.x, item.y, (r, g, b, a), item.lightness, item.max_lightness)
                         
                 for item in item_list:
                     try:
@@ -343,7 +346,7 @@ class AREA:
                     except Exception as e:
                         print(e)
                         continue
-                    r, g, b, a = self.floor_light_up(rect_x, rect_y, item.x, item.y, (r, g, b, a))
+                    r, g, b, a = self.floor_light_up(rect_x, rect_y, item.x, item.y, (r, g, b, a), 0, 3)
                 draw_rect(rect_x, rect_y, self.tile_size, self.tile_size, color=(r, g, b))
         
     def draw(self):
@@ -361,6 +364,11 @@ class AREA:
             if obj.collision_detection(x, y, radius):
                 return True
         return False
+
+    def update(self):
+        self.lightness += dt * self.l_dir
+        if self.lightness >= self.max_lightness or self.lightness <= 0:
+            self.l_dir *= -1
 
 class ROOM(AREA):
     def __init__(self, x, y, width, length, tile_size=50, wall_color=(0.28, 0.20, 0.14, 1), floor_color=(0.18, 0.18, 0.17, 1), door_at="tblf", gap_at=""):
@@ -581,12 +589,13 @@ class PLAYER:
             return
 
         if self.attack_phase == "raise":
+            self.attack_angle = 190
+            self.attack_phase = "swing"
+            # self.attack_angle -= self.attack_speed * dt
 
-            self.attack_angle += self.attack_speed * dt
-
-            if self.attack_angle >= 100:
-                self.attack_angle = 100
-                self.attack_phase = "swing"
+            # if self.attack_angle >= 100:
+            #     self.attack_angle = 100
+            #     self.attack_phase = "swing"
 
         elif self.attack_phase == "swing":
 
@@ -780,22 +789,14 @@ class ADVENTURER(PLAYER):
 
         glPushMatrix()
 
-        glTranslatef(
-            side * W * 0.22,
-            0,
-            -H * 0.28
-        )
+        glTranslatef(side * W * 0.22, 0, -H * 0.28)
 
         # Opposite leg movement
-        glRotatef(
-            self.body_angle * side,
-            1, 0, 0
-        )
+        glRotatef(self.body_angle * side, 1, 0, 0)
 
         # Leg
         self.cube(
             (0.12, 0.13, 0.15, 1),
-
             0,
             0,
             -H * 0.12,
@@ -837,10 +838,11 @@ class ADVENTURER(PLAYER):
         # Walking animation
             
         if self.attack_on:
-            glRotatef(
-                -self.attack_angle,
-                1, 0, 0
-            )
+            if side == -1:
+                glRotatef(
+                    -self.attack_angle,
+                    1, 0, 0
+                )
 
         else:
 
@@ -1002,7 +1004,7 @@ class ADVENTURER(PLAYER):
             cape_color,
 
             0,
-            D * 0.7,
+            D * 0.5,
             0,
 
             W * 0.70,
@@ -1106,7 +1108,10 @@ class HUD:
         self.draw_level_text()
         
         if PAUSE:
-            draw_text(-100, 0, "PAUSED")
+            draw_text(-50, 0, "PAUSED")
+        
+        if CHEAT_MODE:
+            draw_text(-100, 200, "[CHEAT MODE: ON]")
             
             
         # Restore original projection and modelview matrices
@@ -1130,6 +1135,9 @@ class STATIC_OBJECT:
         self.depth = depth
         
         self.isLightSource = isLightSource
+        self.l_dir = 1
+        self.lightness = 0
+        self.max_lightness = 1
         
     def draw(self):
         glPushMatrix()
@@ -1148,6 +1156,12 @@ class TORCH(STATIC_OBJECT):
     
     def __init__(self, x, y, z, width, height, depth):
         super().__init__(x, y, z, width, height, depth, isLightSource=True)
+        
+    def update(self):
+        super().update()
+        self.lightness += dt*self.l_dir
+        if self.lightness >= self.max_lightness or self.lightness <= 0:
+            self.l_dir *= -1
 
     def draw(self):
         glPushMatrix()
@@ -1171,6 +1185,10 @@ class TORCH(STATIC_OBJECT):
 
         # OUTER FLAME
         glColor4f(1.0, 0.18, 0.01, 1)
+        g = 0.5 + (0.50 - 0.18)*self.lightness/self.max_lightness
+        b = 0.02 + (0.02 - 0.01)*self.lightness/self.max_lightness
+        # print(g, b)
+        glColor4f(1.0, g, b, 1)
         glPushMatrix()
         glTranslatef(0, 0, self.height * 0.75)
         glScalef(self.width / 20 * 0.75, self.depth / 20 * 0.75, self.height / 20 * 0.25)
@@ -1995,10 +2013,13 @@ class DOG(ENEMY):
     def __init__(self, x, y, items=[]):
         super().__init__(x, y, items)
         
-        self.health = 200
-        self.max_health = 200
+        self.health = 70
+        self.max_health = 70
         
-        self.type = 'shooter'
+        # self.type = 'shooter'
+        
+        self.transmission_cooldown = 0
+        self.transmission_cooldown_init = 2.5
     
     def draw_enemy(self):
         if self.health <= 0:
@@ -2011,6 +2032,8 @@ class DOG(ENEMY):
         glTranslatef(self.x, self.y, self.z)
         glRotatef(180, 0, 0, 1)
         glRotatef(self.angle, 0, 0, 1)
+        
+        glScalef(1, 5, 1)
 
         # =====================================================
         # MAIN BODY
@@ -2415,6 +2438,23 @@ class DOG(ENEMY):
 
         glPopMatrix()
 
+    def update(self):
+        super().update()
+        if self.transmission_cooldown > 0:
+            self.transmission_cooldown -= dt
+            if self.transmission_cooldown < 0:
+                self.transmission_cooldown = 0
+        
+        if self.detected_player and self.transmission_cooldown == 0:
+            if random.random()*10 < 0.3:
+                theta = math.radians(player.angle)
+                x = player.x - math.sin(theta) * 50
+                y = player.y + math.cos(theta) * 50
+                self.x = x
+                self.y = y
+                self.angle = (self.angle + 180)%360
+                self.transmission_cooldown = self.transmission_cooldown_init
+
 class ZOMBIE(ENEMY):
     def __init__(self, x, y, items=[]):
         super().__init__(x, y, items)
@@ -2428,7 +2468,7 @@ class ZOMBIE(ENEMY):
         glTranslatef(self.x, self.y, self.z)
         glRotatef(180, 0, 0, 1)
         glRotatef(self.angle, 0, 0, 1)
-
+        glScalef(1, 3, 1)
         # =====================================================
         # TORSO
         # =====================================================
@@ -2830,6 +2870,7 @@ class SKELETON(ENEMY):
         glTranslatef(self.x, self.y, 20)
         glRotatef(180, 0, 0, 1)
         glRotatef(self.angle, 0, 0, 1)
+        glScalef(1, 3, 1)
 
         alpha = max(0.5, self.health / 100)
 
@@ -2845,11 +2886,7 @@ class SKELETON(ENEMY):
 
         glColor4f(*bone, alpha)
 
-        glScalef(
-            self.width * 0.70,
-            self.depth * 0.75,
-            self.height * 0.42
-        )
+        glScalef(self.width * 0.70, self.depth * 0.75, self.height * 0.42)
 
         glutSolidSphere(0.5, 16, 12)
 
@@ -3434,7 +3471,7 @@ def keyboardListener(key, x, y):
                 player.shield_on = not player.shield_on
             
         if key == b'v':
-            VIEW_MODE = (VIEW_MODE + 1) % 2
+            VIEW_MODE = (VIEW_MODE + 1) % 4
             
         if key == b'c':
             CHEAT_MODE = not CHEAT_MODE
@@ -3446,9 +3483,16 @@ def keyboardListener(key, x, y):
         for item in item_list:
             item.keyboard_listener(key)
 
-    if key == b'\x1b':
-        # GAME_STATE = "MENU"
-        glutLeaveMainLoop()
+        if key == b'\x1b':
+            GAME_STATE = "MENU"
+            
+    elif GAME_STATE == "ROOM SELECT":
+        if key == b'\x1b':
+            GAME_STATE = "MENU"
+            
+    elif GAME_STATE == "MENU":
+        if key == b'\x1b':
+            glutLeaveMainLoop()
 
 def specialKeyListener(key, x, y):
     # Move camera up (UP arrow key)
@@ -3530,6 +3574,11 @@ def idle(value=0):
         player.update()
         camera.update()
         hud.update()
+        
+        for room in room_list:
+            distance = getDistance(room.x, room.y, player.x, player.y)
+            if distance < DRAWING_RADIUS:
+                room.update()
         
         for item in item_list:
             distance = getDistance(item.x, item.y, player.x, player.y)
@@ -3625,7 +3674,10 @@ player = None
 hud = None
 
 def game_init(room_no):
-    global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list, hint_arrow_list
+    global item_list, static_item_list, room_list, room_to_move, player, hud, enemy_list, trap_list, hint_arrow_list, CHEAT_MODE, SECONDS, ROOM_LEVEL
+    CHEAT_MODE = False 
+    SECONDS = 0
+    ROOM_LEVEL = 1
     
     room = ROOMS[room_no]
     
