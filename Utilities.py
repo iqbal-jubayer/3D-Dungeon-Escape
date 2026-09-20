@@ -10,9 +10,41 @@ import random
 
 WINDOW_SIZE = (720, 520)
 WINDOW_TITLE = b"3D Dungeon Escape"
+FPS = 60
 fovY = 120  # Field of view
 
-VIEW_MODE = 1
+GAME_STATES = {
+    "MAINMENU" : 0,
+    "SELECT WORLD": 1,
+    "GAME" : 2,
+    "HELP" : 3,
+    "ESCAPED" : 4,
+    "GAMEOVER": 5
+}
+
+class GLOBAL_VARS:
+    GAME_STATE = GAME_STATES["GAME"]
+    VIEW_MODE = 1
+    SELECTED_WORLD = 1
+    SECONDS = 0
+    CHEAT_MODE = False
+    ROOM_LEVEL = 1
+    PAUSE = False
+    dt = 1
+    
+    room_list = []
+    item_list = []
+    trap_list = []
+    static_item_list = []
+    hint_arrow_list = []
+    enemy_list = []
+    
+    player = None
+    hud = None
+    
+    DRAWING_RADIUS = 1000
+
+global_vars = GLOBAL_VARS()
 
 # Utility Functions
 def getDistance(obj1_x, obj1_y, obj2_x, obj2_y):
@@ -84,6 +116,17 @@ def draw_rect(x, y, width, height, color=(1,1,1), color1=None, color2=None,color
     glColor4f(r3, g3, b3, 1)
     glVertex3f(x+width//2, y+height//2, 0)
     glEnd()
+
+def setup_projection():
+    glViewport(0, 0, WINDOW_SIZE[0], WINDOW_SIZE[1])
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    glOrtho(-WINDOW_SIZE[0]//2, WINDOW_SIZE[0]//2, -WINDOW_SIZE[1]//2, WINDOW_SIZE[1]//2, 0, 1)
+    glMatrixMode(GL_MODELVIEW)
+
+def updateLevel():
+    global_vars.ROOM_LEVEL += 1
+    
 
 # Utility Classes
 class BUTTON:
