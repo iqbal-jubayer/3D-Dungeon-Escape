@@ -8,11 +8,16 @@ import time
 import math
 import random
 
+import pygame
+
 WINDOW_SIZE = (720, 520)
 GAME_TITLE = "3D Dungeon Escape"
 WINDOW_TITLE = b"3D Dungeon Escape"
 FPS = 60
 fovY = 120  # Field of view
+
+pygame.init()
+pygame.mixer.init()
 
 GAME_STATES = {
     "MAINMENU" : 0,
@@ -21,6 +26,7 @@ GAME_STATES = {
     "HELP" : 3,
     "ESCAPED" : 4,
     "GAMEOVER": 5,
+    "CREDITS" : 6
 }
 
 class GLOBAL_VARS:
@@ -45,6 +51,16 @@ class GLOBAL_VARS:
     level = None
     
     DRAWING_RADIUS = 1000
+    
+    
+    enemy_sound_channel = pygame.mixer.Channel(1)
+    enemy_sound_timer = 0
+    enemy_sound_list = [
+        pygame.mixer.Sound("audio/Ghost.mp3"),
+        pygame.mixer.Sound("audio/zombie.mp3")
+    ]
+    enemy_sound_last = None
+    enemy_sound_time_delay = 3
 
 global_vars = GLOBAL_VARS()
 

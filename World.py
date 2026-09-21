@@ -122,6 +122,8 @@ class World:
                         
                         DOG(-1100, -2700),
                         DOG(-1540, -2700),
+                        
+                        SKELETON(0, -100),
                         ],
                 }
             },
@@ -201,3 +203,6 @@ class World:
         global_vars.static_item_list = entities['static_item_list']
         global_vars.hint_arrow_list = entities['hint_arrow_list']
         global_vars.enemy_list = entities['enemy_list']
+        
+        pygame.mixer.music.load("audio/bg_music.mp3")
+        pygame.mixer.music.play(-1)

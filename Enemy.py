@@ -1,4 +1,5 @@
 from Item import HEALTH, SHIELD
+from Player import BULLET
 from Utilities import *
 
 # ENEMY
@@ -47,6 +48,8 @@ class ENEMY:
         
         self.bullets = []
         
+        self.sound_a = 0
+        
     def draw_enemy(self):
         alpha = max(self.health / self.max_health, 0.3)
         
@@ -77,7 +80,6 @@ class ENEMY:
             self.attack_cooldown = self.attack_cooldown_init
             
     def fire(self, distance):
-        return
         if self.shoot_cooldown <= 0:
             theta = math.radians(self.angle)
             fx = math.sin(theta)
@@ -203,6 +205,21 @@ class ENEMY:
         
         return move_x, move_y
     
+    def make_sound(self):
+        if not global_vars.enemy_sound_channel.get_busy() and global_vars.enemy_sound_timer >= global_vars.enemy_sound_time_delay:
+            snd = random.choice(global_vars.enemy_sound_list)
+            if global_vars.enemy_sound_last is None:
+                global_vars.enemy_sound_last = snd
+            else:
+                while snd == global_vars.enemy_sound_last:
+                    snd = random.choice(global_vars.enemy_sound_list)
+                global_vars.enemy_sound_last = snd
+            global_vars.enemy_sound_channel.play(snd)
+            global_vars.enemy_sound_timer = 0
+        
+        if not global_vars.enemy_sound_channel.get_busy():
+            global_vars.enemy_sound_timer += global_vars.dt
+    
     def update(self):
         if not self.alive:
             return
@@ -225,6 +242,7 @@ class ENEMY:
         
         if distance < 400:
             self.detected_player = True
+            self.make_sound()
         else:
             self.detected_player = False
         

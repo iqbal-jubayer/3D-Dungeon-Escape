@@ -585,6 +585,12 @@ class BULLET:
                 self.active = False
                 enemy.get_damage(30)
                 
+        if global_vars.player != self.owner:
+            distance = getDistance(self.x, self.y, global_vars.player.x, global_vars.player.y)
+            if distance <= 30:
+                self.active = False
+                global_vars.player.get_damage(20)
+                
         
         for room in global_vars.room_list:
             collided = room.collision_detection(self.x, self.y, 5)
