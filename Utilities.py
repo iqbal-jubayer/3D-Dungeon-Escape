@@ -9,6 +9,7 @@ import math
 import random
 
 WINDOW_SIZE = (720, 520)
+GAME_TITLE = "3D Dungeon Escape"
 WINDOW_TITLE = b"3D Dungeon Escape"
 FPS = 60
 fovY = 120  # Field of view
@@ -19,7 +20,7 @@ GAME_STATES = {
     "GAME" : 2,
     "HELP" : 3,
     "ESCAPED" : 4,
-    "GAMEOVER": 5
+    "GAMEOVER": 5,
 }
 
 class GLOBAL_VARS:
@@ -41,6 +42,7 @@ class GLOBAL_VARS:
     
     player = None
     hud = None
+    level = None
     
     DRAWING_RADIUS = 1000
 

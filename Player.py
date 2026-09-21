@@ -251,6 +251,12 @@ class PLAYER:
         self.update_attack()
         self.update_bullet()
 
+    def mouseListener(self, button, state, x, y):
+        if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
+            self.attack()
+        if button == GLUT_RIGHT_BUTTON and state == GLUT_DOWN:
+            self.fire()
+
 class ADVENTURER(PLAYER):
     quadric = gluNewQuadric()
 

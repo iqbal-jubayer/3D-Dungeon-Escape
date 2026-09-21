@@ -2,7 +2,7 @@ from Utilities import *
 
 class Level:
     def __init__(self):
-        pass
+        self.gamemenu = False
     
     def draw(self):
         for room in global_vars.room_list:
@@ -66,3 +66,35 @@ class Level:
                     enemy.update()
                 else:
                     global_vars.enemy_list.remove(enemy)
+                    
+    def keyboardDownListener(self, key, x, y):
+        if key == b'\x1b':
+            global_vars.PAUSE = not global_vars.PAUSE
+            
+        if global_vars.PAUSE:
+            return
+        
+        if key == b'w':
+            global_vars.player.move(1)
+        if key == b's':
+            global_vars.player.move(-1)
+        if key == b'a':
+            global_vars.player.rotate(1)
+        if key == b'd':
+            global_vars.player.rotate(-1)
+            
+        if key == b'z':
+            if global_vars.player.shield > 0:
+                global_vars.player.shield_on = not global_vars.player.shield_on
+            
+        if key == b'v':
+            global_vars.VIEW_MODE = (global_vars.VIEW_MODE + 1) % 4
+            
+        if key == b'c':
+            global_vars.CHEAT_MODE = not global_vars.CHEAT_MODE
+            
+        if key == b' ':
+            global_vars.player.jump()
+        
+        for item in global_vars.item_list:
+            item.keyboard_listener(key)
