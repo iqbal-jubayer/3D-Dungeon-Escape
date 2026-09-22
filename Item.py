@@ -119,9 +119,11 @@ class HEALTH(ITEM):
     def callBack(self):
         self.visible = False
         self.active = False
-        if global_vars.player.health + 15 <= global_vars.player.max_health:
+        if global_vars.player.health < global_vars.player.max_health:
             global_vars.player.health += 15
-
+        if global_vars.player.health > global_vars.player.max_health:
+            global_vars.player.health = global_vars.player.max_health
+        
 class SHIELD(ITEM):
     def __init__(self, x, y):
         super().__init__(x, y, 0, 10, 10, 20, 20, (0, 0, 1, 1))
@@ -152,5 +154,7 @@ class SHIELD(ITEM):
     def callBack(self):
         self.visible = False
         self.active = False
-        if global_vars.player.shield + 30 <= global_vars.player.max_shield:
+        if global_vars.player.shield < global_vars.player.max_shield:
             global_vars.player.shield += 30
+        if global_vars.player.shield > global_vars.player.max_shield:
+            global_vars.player.shield = global_vars.player.max_shield

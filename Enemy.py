@@ -155,7 +155,7 @@ class ENEMY:
             
         if abs(1 + dot) < 0.2:
             self.get_damage(30)
-            self.speed -= 30
+            self.speed -= 10
             self.damage_cooldown = self.damage_cooldown_init
     
     def update_health(self):

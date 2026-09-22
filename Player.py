@@ -33,7 +33,7 @@ class PLAYER:
         self.moving = False
         self.moved = 0
         self.speed = 0
-        self.acc = 12000
+        self.acc = 16000
         self.sprint = False
         self.sprint_acc = 24000
         
@@ -56,13 +56,14 @@ class PLAYER:
         self.body_movement_speed = 600
     
         self.attack_on = False
-        self.attack_angle = 0
-        self.attack_phase = "raise"
-        self.attack_speed = 2000
-        self.attack_left_arm = False
+        
+        self.fire_cooldown = 0
         
         self.bullets = []
         self.keys = []
+        
+        self.move_count = 0
+        self.combo_timer = 0
          
     def jump(self):
         if not self.on_air:
@@ -83,10 +84,10 @@ class PLAYER:
             self.move(0.45 * direction * global_vars.dt * 60)
     
     def fire(self):
-        if not self.attack_on:
+        if self.fire_cooldown == 0:
             dx, dy = self.get_face_point()
             self.bullets.append(BULLET(self.x, self.y, self.z + self.height//2, dx, dy, self))
-            self.attack()
+            self.fire_cooldown = 1
     
     def attack(self):
         if not self.attack_on:
@@ -229,7 +230,7 @@ class PLAYER:
     
     def update_life(self):
         if self.life <= 0:
-            GAME_STATE = "GAMEOVER"
+            global_vars.GAME_STATE = "GAMEOVER"
             
         if self.health <= 0:
             self.life -= 1
@@ -241,15 +242,20 @@ class PLAYER:
         if self.damage_cooldown >= 0:
             self.damage_cooldown -= 1
     
+    def update_fire(self):
+        if self.fire_cooldown > 0:
+            self.fire_cooldown -= global_vars.dt
+        elif self.fire_cooldown < 0:
+            self.fire_cooldown = 0
+            
     def update(self):
-        global GAME_STATE
-        
         self.update_life()
         self.update_rotate()
         self.update_move()
         self.update_jump()
         self.update_attack()
         self.update_bullet()
+        self.update_fire()
 
     def mouseListener(self, button, state, x, y):
         if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
@@ -257,11 +263,76 @@ class PLAYER:
         if button == GLUT_RIGHT_BUTTON and state == GLUT_DOWN:
             self.fire()
 
-class ADVENTURER(PLAYER):
+class MALE(PLAYER):
     quadric = gluNewQuadric()
 
     def __init__(self, x, y):
         super().__init__(x, y)
+        
+        self.attack_move = []
+        self.attack_move_count = 0
+        self.combo_timer = 0
+        
+        self.combo_right_arm_angle = 0
+        self.combo_left_arm_angle = 0
+        self.combo_both_arm_angle = 0
+        self.combo_body_angle = 0
+        
+        self.arm_color = (0.18, 0.20, 0.23, 1)
+        self.torso_color = (0.16, 0.20, 0.25, 1)
+        self.hair_color = (0.08, 0.05, 0.03, 1)
+        
+    def attack(self):
+        self.attack_on = True
+        if len(self.attack_move) == 0:
+            self.combo_timer = 2
+            self.combo_right_arm_angle = -60
+            self.attack_move.append("right")
+        elif self.attack_move_count == 1:
+            self.combo_left_arm_angle = -60
+            self.attack_move.append("left")
+        elif self.attack_move_count == 2:
+            self.combo_both_arm_angle = -90
+            self.attack_move.append("both")
+        elif self.attack_move_count == 3:
+            self.combo_body_angle = -360
+            self.attack_move.append("rotate")
+        
+        if self.attack_move_count < 4:
+            self.attack_move_count += 1
+    
+    def update_attack(self):
+        
+        if len(self.attack_move) > 0 and self.attack_move[0] == "right":
+            if self.combo_right_arm_angle < 0:
+                self.combo_right_arm_angle += 3
+            else:
+                self.combo_right_arm_angle = 0
+                self.attack_move.pop(0)
+        elif len(self.attack_move) > 0 and self.attack_move[0] == "left":
+            if self.combo_left_arm_angle < 0:
+                self.combo_left_arm_angle += 3
+            else:
+                self.combo_left_arm_angle = 0
+                self.attack_move.pop(0)
+                
+        elif len(self.attack_move) > 0 and self.attack_move[0] == "both":
+            if self.combo_both_arm_angle < 0:
+                self.combo_both_arm_angle += 3
+            else:
+                self.combo_both_arm_angle = 0
+                self.attack_move.pop(0)
+                
+        elif len(self.attack_move) > 0 and self.attack_move[0] == "rotate":
+            if self.combo_body_angle < 0:
+                self.combo_body_angle += 15
+            else:
+                self.combo_body_angle = 0
+                self.attack_move.pop(0)
+                        
+        if len(self.attack_move) == 0 and self.attack_on:
+            self.attack_move_count = 0
+            self.attack_on = False
 
     def cube(self, color, x, y, z, sx, sy, sz):
 
@@ -286,7 +357,7 @@ class ADVENTURER(PLAYER):
         glScalef(sx, sy, sz)
 
         gluSphere(
-            ADVENTURER.quadric,
+            MALE.quadric,
             1,
             10,
             8)
@@ -307,29 +378,10 @@ class ADVENTURER(PLAYER):
         glRotatef(self.arm_angle * side, 1, 0, 0)
 
         # Leg
-        self.cube(
-            (0.12, 0.13, 0.15, 1),
-            0,
-            0,
-            -H * 0.12,
-
-            W * 0.32,
-            D * 0.75,
-            H * 0.35
-        )
+        self.cube(self.arm_color,0,0,-H * 0.12,W * 0.32,D * 0.75,H * 0.35)
 
         # Boot
-        self.cube(
-            (0.06, 0.05, 0.04, 1),
-
-            0,
-            -D * 0.18,
-            -H * 0.32,
-
-            W * 0.38,
-            D * 1.15,
-            H * 0.16
-        )
+        self.cube((0.06, 0.05, 0.04, 1), 0, -D * 0.18, -H * 0.32, W * 0.38, D * 1.15, H * 0.16)
 
         glPopMatrix()
 
@@ -348,15 +400,27 @@ class ADVENTURER(PLAYER):
         )
 
         # Walking animation
-        if self.attack_on:
-            if side == -1:
-                glRotatef(
-                    -self.attack_angle,
-                    1, 0, 0
-                )
-
+        if len(self.attack_move) > 0 and self.attack_move[0] == "right"  and side == -1:
+            glRotatef(
+                self.combo_right_arm_angle,
+                1, 0, 0
+            )
+        elif len(self.attack_move) > 0 and self.attack_move[0] == "left" and side == 1:
+            glRotatef(
+                self.combo_left_arm_angle,
+                1, 0, 0
+            )
+        elif len(self.attack_move) > 0 and self.attack_move[0] == "both":
+            glRotatef(
+                self.combo_both_arm_angle,
+                1, 0, 0
+            )
+        elif len(self.attack_move) > 0 and self.attack_move[0] == "rotate":
+            glRotatef(
+                45*side,
+                1, 0, 0
+            )
         else:
-
             glRotatef(
                 -self.arm_angle * side,
                 1, 0, 0
@@ -364,7 +428,7 @@ class ADVENTURER(PLAYER):
 
         # Upper + lower arm
         self.cube(
-            (0.18, 0.20, 0.23, 1),
+            self.arm_color,
 
             0,
             0,
@@ -400,7 +464,7 @@ class ADVENTURER(PLAYER):
         if self.shield_on:
             torso_color = (0.0, 0.8, 1.0, 1)
         else:
-            torso_color = (0.16, 0.20, 0.25, 1)
+            torso_color = self.torso_color
         self.cube(
             torso_color,
 
@@ -446,58 +510,17 @@ class ADVENTURER(PLAYER):
         H = self.height
 
         # Neck
-        self.cube(
-            (0.55, 0.32, 0.20, 1),
-
-            0,
-            0,
-            H * 0.40,
-
-            W * 0.25,
-            D * 0.25,
-            W * 0.22
-        )
+        self.cube((0.55, 0.32, 0.20, 1), 0, 0, H * 0.40, W * 0.25, D * 0.25, W * 0.22)
 
         # Head
-        self.sphere(
-            (0.55, 0.32, 0.20, 1),
-
-            0,
-            0,
-            H * 0.55,
-
-            W * 0.40,
-            W * 0.40,
-            W * 0.40
-        )
+        self.sphere((0.55, 0.32, 0.20, 1), 0, 0, H * 0.55, W * 0.40, W * 0.40, W * 0.40)
 
         # Hair
-        self.sphere(
-            (0.08, 0.05, 0.03, 1),
-
-            0,
-            0,
-            H * 0.67,
-
-            W * 0.43,
-            W * 0.43,
-            W * 0.25
-        )
+        self.sphere(self.hair_color, 0, 0, H * 0.67, W * 0.43, W * 0.43, W * 0.25)
 
         # Eyes
         for x in (-W * 0.12, W * 0.12):
-
-            self.cube(
-                (0.05, 0.05, 0.05, 1),
-
-                x,
-                -W * 0.38,
-                H * 0.57,
-
-                W * 0.055,
-                W * 0.025,
-                W * 0.055
-            )
+            self.cube((0.05, 0.05, 0.05, 1), x, -W * 0.38, H * 0.57, W * 0.055, W * 0.025, W * 0.055)
 
     def draw_cape(self):
 
@@ -528,6 +551,9 @@ class ADVENTURER(PLAYER):
         glPushMatrix()
         glTranslatef(self.x, self.y, self.z)
         glRotatef(self.angle, 0, 0, 1)
+        
+        if len(self.attack_move) > 0 and self.attack_move[0] == "rotate":
+            glRotatef(self.combo_body_angle, 0, 0, 1)
 
         # Body
         self.draw_body()
@@ -548,7 +574,13 @@ class ADVENTURER(PLAYER):
 
         glPopMatrix()    
 
-
+class FEMALE(MALE):
+    def __init__(self, x, y):
+        super().__init__(x, y)
+        self.arm_color = (0.18, 0.04, 0.23, 1)
+        self.torso_color = (0.36, 0.03, 0.25, 1)
+        self.hair_color = (36/255, 0/255, 10/255, 1)
+        
 class BULLET:
     def __init__(self, x, y, z, dir_x, dir_y, owner):
         self.x = x

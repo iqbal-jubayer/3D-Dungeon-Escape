@@ -31,14 +31,10 @@ class MainMenu:
             self.help_button.click(x,y,self.help_button_callback)
             self.credits_button.click(x,y,self.credits_button_callback)
             self.exit_button.click(x,y, glutLeaveMainLoop)
-
+            
 class RoomMenu:
     def __init__(self):
-        # print(game_init)
-        self.room_buttons = [
-            BUTTON(-55, 0, 50, 50, (1, 1, 1), text="1"),
-            BUTTON(0, 0, 50, 50, (1, 1, 1), text="2"),
-        ]
+        self.room_buttons = [global_vars.world.world[i]["button"] for i in global_vars.world.world]
     
     def draw(self):
         glColor4f(1, 0, 0, 1)
@@ -134,7 +130,7 @@ class CreditsMenu:
         draw_text(-50, 10, "DEVELOPED BY,", font=GLUT_BITMAP_HELVETICA_18)
         draw_text(0, -30, "JUBAYER IQBAL", font=GLUT_BITMAP_HELVETICA_18)
         draw_text(0, -70, "YEASIN ARAFAT RABBY", font=GLUT_BITMAP_HELVETICA_18)
-        draw_text(0, -110, "MD. ATIKULLA TANVIR", font=GLUT_BITMAP_HELVETICA_18)
+        draw_text(0, -110, "MD. ATIKULLAH TANVIR", font=GLUT_BITMAP_HELVETICA_18)
         self.back_button.draw()
         
     def back_button_callback(self):
@@ -168,8 +164,6 @@ class Menu:
             self.gameOverMenu.draw()
         elif global_vars.GAME_STATE == GAME_STATES["CREDITS"]:
             self.creditsMenu.draw()
-        else:
-            print(global_vars.GAME_STATE)
     
     def mouseListener(self, button, state, x, y):
         if global_vars.GAME_STATE == GAME_STATES["MAINMENU"]:

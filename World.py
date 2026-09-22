@@ -58,13 +58,13 @@ class World:
                         ROOM(-1220, -2380, 15, 15,door_at='bt', gap_at=''),
                         ],
                     "item_list":[
-                        DOOR(610, -1270, 50, callBack=updateLevel, required_key_name="0x001"),
+                        DOOR(610, -1270, 50, required_key_name="0x001"),
                         KEY(-1650, -380, (1, 0, 0), name="0x001"),
                         
-                        DOOR(-370, -1770, 50, callBack=updateLevel, required_key_name="0x002"),
+                        DOOR(-370, -1770, 50, required_key_name="0x002"),
                         KEY(1250, -530, (1, 1, 0), name="0x002"),
                         
-                        DOOR(-1220, -2010, 50, callBack=updateLevel, required_key_name="0x003"),
+                        DOOR(-1220, -2010, 50, required_key_name="0x003"),
                         KEY(-2000, -1230, (0, 1, 0), name="0x003"),
                         
                         ESCAPE_DOOR(-1220, -2800, 50, required_key_name="0x004"),
@@ -123,77 +123,23 @@ class World:
                         DOG(-1100, -2700),
                         DOG(-1540, -2700),
                         
-                        SKELETON(0, -100),
-                        ],
-                }
-            },
-            "2":{
-                "button":BUTTON(0, 0, 50, 50, (1, 1, 1), text="2"),
-                "spawn_point":(0, 0),
-                "entities":{
-                    "room_list":[
-                        TUNNEL(0, -170, 3, 10, type="lrb"),
-                        TUNNEL(0, -520, 3, 3, type="tl"),
-                        TUNNEL(-350, -520, 10, 3, type="tb"),
-                        TUNNEL(-700, -520, 3, 3, type="r"),
-                        TUNNEL(-700, -20, 3, 15, type="lr"),
-                        TUNNEL(-700, 480, 3, 3, type="lb"),
-                        ROOM(-900, 480, 3, 3, door_at='l'),
-                        TUNNEL(-700, -870, 3, 10, type="lr"),
-                        TUNNEL(-700, -1220, 3, 3, type="t"),
-                        TUNNEL(-200, -1220, 15, 3, type="tb"),
-                        TUNNEL(300, -1220, 3, 3, type="lb"),
-                        TUNNEL(300, -1470, 3, 6, type="lr"),
-                        ROOM(300, -1870, 10, 10, door_at='br'),
-                        TUNNEL(-1050, -1220, 10, 3, type="tb"),
-                        ROOM(-1550, -1220, 10, 10, door_at='lt'),
-                        TUNNEL(-1520, -1610, 3, 6, type="lr"),
-                        ],
-                    "item_list":[
-                        KEY(280, -2065, (1, 0, 0), name="0x001")
-                        ],
-                    "trap_list":[
-                        ],
-                    "static_item_list":[
-                        TORCH(0, -100, 10, 20, 60, 20)
-                        ],
-                    "hint_arrow_list":[
-                        ],
-                    "enemy_list":[
                         # SKELETON(0, -100),
-                        DOG(300, -1255),
-                        DOG(450, -2045),
-                        DOG(100, -2045),
-                        ZOMBIE(280, -1955),
-                        # DOG(0, -100)
                         ],
                 }
             },
-            "3":{
-                "button":BUTTON(-55, 0, 50, 50, (1, 1, 1), text="1"),
-                "spawn_point":(0, 0),
-                "entities":{
-                    "room_list":[ROOM(0, 0, 10, 10, 50, door_at='t', gap_at=""),],
-                    "item_list":[],
-                    "trap_list":[],
-                    "static_item_list":[],
-                    "hint_arrow_list":[],
-                    "enemy_list":[],
-                }
-            },
+            
         }
         return world
     
     def load_level(self, room_no):
         global_vars.CHEAT_MODE = False 
         global_vars.SECONDS = 0
-        global_vars.ROOM_LEVEL = 1
 
         self.world = self.create_world()
         room = self.world[room_no]
 
         px, py = room["spawn_point"]
-        global_vars.player = ADVENTURER(px, py)
+        global_vars.player = MALE(px, py)
         global_vars.hud = HUD()
 
         entities = room["entities"]
@@ -203,6 +149,3 @@ class World:
         global_vars.static_item_list = entities['static_item_list']
         global_vars.hint_arrow_list = entities['hint_arrow_list']
         global_vars.enemy_list = entities['enemy_list']
-        
-        pygame.mixer.music.load("audio/bg_music.mp3")
-        pygame.mixer.music.play(-1)

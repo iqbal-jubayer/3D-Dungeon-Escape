@@ -4,11 +4,11 @@ from Camera import *
 from Level import *
 from World import *
 
-menu = Menu()
 global_vars.level = Level()
 camera = CAMERA()
-world = World() 
-world.load_level("1")
+global_vars.world = World() 
+global_vars.world.load_level("1")
+menu = Menu()
 
 # Callbacks
 def keyboardDownListener(key, x, y):
@@ -82,7 +82,7 @@ def idle(value=0):
     if global_vars.GAME_STATE == GAME_STATES["SELECT WORLD"]:
         if global_vars.SELECTED_WORLD != -1:
             global_vars.GAME_STATE = GAME_STATES["GAME"]
-            world.load_level(global_vars.SELECTED_WORLD)
+            global_vars.world.load_level(global_vars.SELECTED_WORLD)
             
     elif global_vars.GAME_STATE == GAME_STATES['GAME']:
         if global_vars.PAUSE:

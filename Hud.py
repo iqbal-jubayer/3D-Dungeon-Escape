@@ -65,9 +65,6 @@ class HUD:
     def draw_life(self):
         draw_text(-WINDOW_SIZE[0]//2 + 10, WINDOW_SIZE[1]//2 - 150, f"Life: {global_vars.player.life}")
         
-    def draw_level_text(self):
-        draw_text(265, 200, f"Level: {global_vars.ROOM_LEVEL}")
-        
     def draw_game_menu(self):
         if not global_vars.PAUSE:
             return
@@ -96,7 +93,6 @@ class HUD:
         self.draw_instructions()
         self.draw_life()
         self.draw_time()
-        self.draw_level_text()
         
         if global_vars.CHEAT_MODE:
             draw_text(-100, 200, "[CHEAT MODE: ON]")

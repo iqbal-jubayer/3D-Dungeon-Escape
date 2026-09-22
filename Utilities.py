@@ -26,18 +26,20 @@ GAME_STATES = {
     "HELP" : 3,
     "ESCAPED" : 4,
     "GAMEOVER": 5,
-    "CREDITS" : 6
+    "CREDITS" : 6,
+    "SELECT PLAYER" : 7,
 }
 
 class GLOBAL_VARS:
-    GAME_STATE = GAME_STATES["GAME"]
+    GAME_STATE = GAME_STATES["MAINMENU"]
     VIEW_MODE = 1
-    SELECTED_WORLD = 1
     SECONDS = 0
+    SELECTED_WORLD = "1"
     CHEAT_MODE = False
-    ROOM_LEVEL = 1
     PAUSE = False
     dt = 1
+    
+    world = None
     
     room_list = []
     item_list = []
@@ -61,6 +63,10 @@ class GLOBAL_VARS:
     ]
     enemy_sound_last = None
     enemy_sound_time_delay = 3
+    
+    def __init__(self):
+        pygame.mixer.music.load("audio/bg_music.mp3")
+        pygame.mixer.music.play(-1)
 
 global_vars = GLOBAL_VARS()
 

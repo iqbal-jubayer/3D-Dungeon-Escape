@@ -9,7 +9,7 @@ class CAMERA:
     target_y = 0
     target_z = 0
     
-    target_up = 45
+    target_up = 30
 
     def __init__(self):
         self.distance = 40
