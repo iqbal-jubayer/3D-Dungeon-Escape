@@ -72,10 +72,10 @@ class PLAYER:
         
     def update_jump(self):
         self.z += self.speedZ * global_vars.dt
-        self.speedZ -= 700 * global_vars.dt
+        self.speedZ -= 800 * global_vars.dt
         
-        if self.z <= self.height / 2:
-            self.z = self.height / 2
+        if self.z <= self.height / 2 + 5:
+            self.z = self.height / 2 + 5
             self.speedZ = 0
             self.on_air = False
 
@@ -90,31 +90,10 @@ class PLAYER:
             self.fire_cooldown = 1
     
     def attack(self):
-        if not self.attack_on:
-            self.attack_on = True
-            self.attack_phase = "raise"
-            self.attack_angle = 0
-            self.attack_left_arm = not self.attack_left_arm
+        pass
         
     def update_attack(self):
-        if not self.attack_on:
-            return
-
-        if self.attack_phase == "raise":
-            self.attack_angle = 140
-            self.attack_phase = "swing"
-
-        elif self.attack_phase == "swing":
-
-            self.attack_angle -= 600 * global_vars.dt
-
-            if self.attack_angle <= 0:
-                self.attack_angle = 0
-                self.attack_phase = "finished"
-
-        elif self.attack_phase == "finished":
-
-            self.attack_on = False
+        pass
     
     def draw_player(self):
         glPushMatrix()
@@ -305,27 +284,27 @@ class MALE(PLAYER):
         
         if len(self.attack_move) > 0 and self.attack_move[0] == "right":
             if self.combo_right_arm_angle < 0:
-                self.combo_right_arm_angle += 3
+                self.combo_right_arm_angle += 300 * global_vars.dt
             else:
                 self.combo_right_arm_angle = 0
                 self.attack_move.pop(0)
         elif len(self.attack_move) > 0 and self.attack_move[0] == "left":
             if self.combo_left_arm_angle < 0:
-                self.combo_left_arm_angle += 3
+                self.combo_left_arm_angle += 300 * global_vars.dt
             else:
                 self.combo_left_arm_angle = 0
                 self.attack_move.pop(0)
                 
         elif len(self.attack_move) > 0 and self.attack_move[0] == "both":
             if self.combo_both_arm_angle < 0:
-                self.combo_both_arm_angle += 3
+                self.combo_both_arm_angle += 300 * global_vars.dt
             else:
                 self.combo_both_arm_angle = 0
                 self.attack_move.pop(0)
                 
         elif len(self.attack_move) > 0 and self.attack_move[0] == "rotate":
             if self.combo_body_angle < 0:
-                self.combo_body_angle += 15
+                self.combo_body_angle += 1500 * global_vars.dt
             else:
                 self.combo_body_angle = 0
                 self.attack_move.pop(0)
